@@ -102,6 +102,29 @@ spielen. **Regel:** Hochkant muss funktionieren, ein Rotationshinweis ist keine 
 Dazu gehört `env(safe-area-inset-bottom)` — `viewport-fit=cover` im Meta-Tag allein bewirkt
 nichts, der Abstand muss auch gesetzt werden.
 
+### Auf dem Telefon entscheidet die Ansicht, was sie zeigt
+Gegnerraster, Bedienleiste und eigenes Raster brauchen zusammen mehr Höhe, als ein Telefon
+hat — gemessen 745 px bei 715 px Schirm. Kleiner rechnen verschiebt das Problem nur bis zum
+nächsten Knopf. **Regel:** Die Spielansicht ist hochkant genau schirmhoch (`100dvh` minus
+gemessener Kopfzeile), scrollt selbst nicht, und ein Umschalter wählt den sichtbaren Bereich.
+Was gehandelt wird, steht immer da; was nachgeschlagen wird, ist einen Tipp entfernt.
+Quer bleibt alles gleichzeitig sichtbar — dort ist Platz.
+
+### Die gesendete Menge kann die Entscheidung sein
+`applySalvo` verlangte „genau N Schüsse ansagen". Für den Salven-Vorrat, bei dem der Spieler
+pro Zug zwischen Einzelschuss und Salve wählt, brauchte es trotzdem **kein neues
+Protokollfeld**: die Anzahl der gesendeten Schüsse *ist* die Wahl. **Regel:** Bevor man das
+Protokoll erweitert, prüfen, ob die vorhandene Nutzlast die Absicht schon trägt.
+Und: eine Begrenzung dort ansetzen, wo sie wirken soll — der Vorrat greift in `maxShots`,
+nicht in `baseSalvo`, sonst hätte er Aufklärung und Tauchen gleich mit abgeräumt.
+
+### Ein Prüfstand, der weniger kann als der Browser, lügt
+Das Mini-DOM kannte nur einfache Selektoren. Der Client verdrahtet seine Umschalter über
+`.game-tabs .tab` — `querySelectorAll` fand nichts, die Handler blieben unverdrahtet, und der
+Test hätte einen toten Umschalter als bestanden gemeldet. **Regel:** Was der Client an
+DOM-Fähigkeiten benutzt, muss der Prüfstand können. Nachfahren-Ketten, Kommalisten und
+`[attribut]` sind jetzt drin.
+
 ### Nur Aktionen kleben, Nachschlagewerk scrollt
 Die klebende Bedienleiste durfte `52vh` hoch werden und trug zusätzlich die Flottenübersicht —
 hochkant verdeckte sie die halbe Spielfläche. **Regel:** In den klebenden Bereich gehört, was

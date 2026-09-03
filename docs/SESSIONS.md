@@ -7,6 +7,41 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-03 (Fortsetzung) · `51de8ed` · Feste Spielansicht, Salven-Vorrat
+
+**Geändert**
+- Spielansicht scrollt hochkant **gar nicht mehr** (#22, #23). Kopfzeile, Umschalter, ein
+  Bereich und die Bedienleiste stehen fest. Umschalter: Gegner · Meine Flotte · Funk; bei
+  eigenem Zug springt er zurück auf Gegner. Leiste von ~340 auf ~150 px geschrumpft.
+- **Salven-Vorrat** als Lobby-Option (#20, #24): Kontingent voller Salven pro Partie,
+  Verbrauch ist Entscheidung pro Zug, danach nur Einzelschuss.
+- Lobby-Link führt direkt hinein statt nur den Code vorzubefüllen (#15).
+
+**Gelernt**
+- Auf einem Telefon passen Gegnerraster, Bedienleiste und eigenes Raster **nie** gleichzeitig
+  auf den Schirm. Kleiner rechnen hilft nur bis zum nächsten Knopf — die Ansicht muss
+  entscheiden, was sie zeigt.
+- `applySalvo` verlangte „genau N ansagen". Bei freier Wahl **ist die gesendete Schusszahl
+  die Entscheidung** — kein neues Protokollfeld nötig.
+- Der Prüfstand kannte keine Nachfahren-Selektoren und hätte einen toten Umschalter als
+  bestanden gemeldet. Ein Stub, der weniger kann als der Browser, gibt falsche Sicherheit.
+
+**Balance-Daten** (je 400 Partien) — sie widerlegen meine Schätzung aus #20 von 80–90 Zügen:
+
+| Regelsatz | Start | Comeback | Züge Ø |
+|---|---|---|---|
+| Standard | 47,5 % | 41,0 % | 38,7 |
+| Vorrat 8 | 52,3 % | 39,0 % | 58,6 |
+| Vorrat 4 | 52,3 % | 44,5 % | 77,6 |
+| Vorrat 15 | 53,5 % | 28,5 % | 42,4 |
+
+Vorrat 8 landet in beiden Zielkorridoren. Bei 15 kippt die Comeback-Rate auf 28,5 % — zu
+viele Salven begünstigen den Führenden.
+
+**Offen**
+- Am Gerät gegenprüfen: Brett vollständig, nichts überlagert, Umschalter erreichbar.
+- Der Vorrat ist simuliert, aber nicht gegen Menschen gespielt.
+
 ## 2026-09-03 (Fortsetzung) · `cacd71a` · Hochkant auf dem iPhone
 
 Aus Screenshots vom Gerät, nicht aus einem Issue. Das Spiel war nur quer benutzbar.
