@@ -234,3 +234,34 @@ test('Diagnose meldet nicht "ok", wenn der letzte Schreibversuch abgelehnt wurde
   });
   resetLimits();
 });
+
+test('Ein erfolgreicher Schreibversuch loescht den gemerkten Fehlschlag', async () => {
+  const routes = {
+    '/repos/u/r/issues': { status: 200, body: [] },
+    '/repos/u/r': { status: 200, body: { has_issues: true } }
+  };
+
+  // Erst scheitern lassen ...
+  await withFakeGithub({ status: 403, body: { message: 'Resource not accessible' } }, async () => {
+    resetLimits();
+    await submitFeedback({ text: 'Scheitert zunaechst', ip: '7.1.1.1' });
+  });
+  await withRoutedGithub(routes, async () => {
+    assert.equal((await diagnose()).reason, 'forbidden', 'Fehlschlag ist gemerkt');
+  });
+
+  // ... dann die Berechtigung reparieren und erneut senden.
+  await withFakeGithub({ status: 201, body: { number: 9, html_url: 'u' } }, async () => {
+    const r = await submitFeedback({ text: 'Jetzt klappt es', ip: '7.2.2.2' });
+    assert.equal(r.ok, true);
+    assert.equal(feedbackStatus().lastError, null, 'Erfolg raeumt den Fehlschlag weg');
+  });
+
+  // Ohne das Aufraeumen bliebe die Diagnose bis zum Neustart auf "forbidden".
+  await withRoutedGithub(routes, async () => {
+    const d = await diagnose();
+    assert.equal(d.ok, true, 'Diagnose meldet wieder einsatzbereit');
+    assert.equal(d.reason, 'ok');
+  });
+  resetLimits();
+});

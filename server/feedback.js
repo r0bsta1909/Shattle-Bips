@@ -328,7 +328,11 @@ export async function submitFeedback({ text, meta = {}, ip } = {}) {
   } catch (err) {
     r = { ok: false, error: TRANSIENT_HINT, reason: 'threw', detail: String(err && err.message || err) };
   }
-  if (!r.ok) lastError = { at: new Date().toISOString(), reason: r.reason || 'unknown', detail: r.detail || null };
+  // Erfolg loescht den gemerkten Fehlschlag. Ohne das bliebe eine behobene
+  // Fehlkonfiguration bis zum naechsten Neustart als "kaputt" stehen, weil
+  // diagnose() dem letzten Schreibversuch Vorrang vor der Leseprobe gibt.
+  if (r.ok) lastError = null;
+  else lastError = { at: new Date().toISOString(), reason: r.reason || 'unknown', detail: r.detail || null };
   return r;
 }
 
