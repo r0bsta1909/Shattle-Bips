@@ -93,9 +93,14 @@ const pubRes = await fetch(`${BASE}/api/feedback/status`);
 const pub = await pubRes.json();
 check(pubRes.status === 200, '/api/feedback/status antwortet');
 check(pub.sink === 'memory' && pub.ok === true, `Senke gemeldet: ${pub.sink}`);
-check(Object.keys(pub).sort().join(',') === 'ok,reason,sink',
-  `öffentlich nur sink/ok/reason (war: ${Object.keys(pub).join(',')})`);
-check(!('lastError' in pub) && !('repo' in pub), 'öffentlich keine Interna');
+// Positivliste statt fester Reihenfolge: neue Kategorien duerfen dazukommen,
+// Interna nicht. Die Namen unten sind genau die, die nach aussen duerfen.
+const ALLOWED = ['sink', 'ok', 'reason', 'reads'];
+const leaked = Object.keys(pub).filter((k) => !ALLOWED.includes(k));
+check(leaked.length === 0, `öffentlich nur ${ALLOWED.join('/')} (zusätzlich: ${leaked.join(',') || 'nichts'})`);
+for (const secret of ['lastError', 'repo', 'status', 'detail', 'hint', 'version']) {
+  check(!(secret in pub), `öffentlich kein "${secret}"`);
+}
 
 const admRes = await fetch(`${BASE}/api/feedback/status`, { headers: { 'x-admin-token': 'test-admin-token' } });
 const adm = await admRes.json();
