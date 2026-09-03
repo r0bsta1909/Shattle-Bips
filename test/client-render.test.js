@@ -258,7 +258,8 @@ test('Schiffssymbole stehen auf dem eigenen Brett (#19)', async () => {
   const own = byId.get('own-grid');
   const syms = own.children.filter((c) => c._classes.has('sym')).map((c) => c.textContent);
   assert.equal(syms.length, 6, 'fünf Schiffe und ein Köder');
-  for (const s of ['⬟', '⬢', '◆', '◉', '▪', '◌']) {
+  // Zerstoerer traegt U+FE0E, damit iOS Text statt Emoji rendert.
+  for (const s of ['⬟', '⬢', '◆', '◉', '▪︎', '◌']) {
     assert.ok(syms.includes(s), `Symbol ${s} fehlt`);
   }
 });
@@ -385,4 +386,22 @@ test('Ohne sunkCells bleibt alles beim Alten', async () => {
   delete m.sunkCells;                            // aeltere Serverfassung
   assert.doesNotThrow(() => feed(m));
   assert.ok(byId.get('foe-grid').children[10]._classes.has('hit'));
+});
+
+test('Flottenuebersicht haengt nicht im klebenden Bereich', async () => {
+  const { byId, feed } = await bootClient();
+  feed(stateMsg());
+
+  // Hochkant klebt .controls unten. Lag die Uebersicht darin, wuchs die Leiste
+  // auf ueber die halbe Schirmhoehe und verdeckte das Spielfeld.
+  const inSticky = (el) => {
+    for (let p = el; p; p = p.parentElement) if (p._classes?.has('controls')) return true;
+    return false;
+  };
+  assert.equal(inSticky(byId.get('fleet-foe')), false, 'Gegnerliste steht ausserhalb');
+  assert.equal(inSticky(byId.get('fleet-own')), false, 'eigene Liste steht ausserhalb');
+
+  // Und trotzdem gefuellt - der Umzug darf das Rendern nicht abhaengen.
+  assert.equal(byId.get('fleet-foe').children.length, 5);
+  assert.equal(byId.get('fleet-own').children.length, 5);
 });

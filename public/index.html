@@ -135,15 +135,17 @@
       <button id="btn-maneuver-cancel">Abbrechen</button>
     </div>
     <p id="game-error" class="error"></p>
+  </div>
 
-    <div class="fleet-legend">
-      <div class="fleet-cols">
-        <div><h4>Gegner</h4><ul id="fleet-foe" class="fleet-list"></ul></div>
-        <div><h4>Deine Flotte</h4><ul id="fleet-own" class="fleet-list"></ul></div>
-      </div>
-      <p class="hint">Aufstellung: nichts berührt sich, auch nicht diagonal &ndash; ein Feld Abstand rundum.
-        Köder sind so lang wie der Zerstörer und werden nie versenkt.</p>
+  <!-- Nachschlagen, keine Aktion: gehört deshalb nicht in den klebenden
+       Bereich, sonst verdeckt der hochkant das halbe Spielfeld. -->
+  <div class="info card">
+    <div class="fleet-cols">
+      <div><h4>Gegner</h4><ul id="fleet-foe" class="fleet-list"></ul></div>
+      <div><h4>Deine Flotte</h4><ul id="fleet-own" class="fleet-list"></ul></div>
     </div>
+    <p class="hint">Aufstellung: nichts berührt sich, auch nicht diagonal &ndash; ein Feld Abstand rundum.
+      Köder sind so lang wie der Zerstörer und werden nie versenkt.</p>
   </div>
 
   <div class="board-col">
@@ -151,7 +153,7 @@
     <div id="own-grid" class="grid own"></div>
   </div>
 
-  <div class="card">
+  <div class="card log-card">
     <h3>Funkverkehr</h3>
     <ul id="log" class="log"></ul>
   </div>

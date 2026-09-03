@@ -16,6 +16,11 @@ const app = readFileSync(path.join(ROOT, 'public/js/app.js'), 'utf8');
 const html = readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
 const css = readFileSync(path.join(ROOT, 'public/css/style.css'), 'utf8');
 
+// Kommentare raus, bevor CSS analysiert wird. Ein Kommentar, der eine alte
+// Deklaration ZITIERT, sah fuer die Regex sonst aus wie die Deklaration selbst -
+// der Test schlug an der eigenen Prosa fehl.
+const cssCode = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
 const referenced = [...app.matchAll(/\$\(\s*'([^']+)'\s*\)/g)].map((m) => m[1]);
 const present = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
 
@@ -107,7 +112,7 @@ test('Aufstellung: Anleitung und Statusmeldung sind getrennte Elemente', () => {
 test('CSS-content-Werte sind einzelne Zeichen, keine kaputten Escapes', () => {
   // Loeste Issue #17 aus: ein CSS-"\2715" (✕) lief durch ein Python-Heredoc,
   // dort ist \271 ein Oktal-Escape -> "¹", Rest "5". Im Raster stand "¹5".
-  const values = [...css.matchAll(/content\s*:\s*"([^"]*)"/g)].map((m) => m[1]);
+  const values = [...cssCode.matchAll(/content\s*:\s*"([^"]*)"/g)].map((m) => m[1]);
   const verdaechtig = values.filter((v) => [...v].length > 1);
   assert.deepEqual(verdaechtig, [],
     `content-Werte mit mehr als einem Zeichen: ${verdaechtig.map((v) => JSON.stringify(v)).join(', ')}`);
@@ -123,4 +128,30 @@ test('Keine Zeichensatz-Schaeden in den ausgelieferten Dateien', () => {
         `${name} enthält den Mojibake-Marker ${JSON.stringify(marker)}`);
     }
   }
+});
+
+test('Kachelgröße ist an Breite UND Höhe gekoppelt', () => {
+  // Loeste die Hochkant-Meldung aus: --cs stand auf min(9vw,34px), landete auf
+  // jedem iPhone bei 34px, und mit der Rasterbeschriftung passte das Brett
+  // nicht mehr in die Breite.
+  const decls = [...cssCode.matchAll(/--cs\s*:\s*([^;]+);/g)].map((m) => m[1].trim());
+  assert.ok(decls.length >= 2, 'Rückfallwert und moderne Fassung vorhanden');
+
+  const modern = decls[decls.length - 1];
+  assert.match(modern, /clamp\(/, 'Unter- und Obergrenze gesetzt');
+  assert.match(modern, /100vw/, 'Breite berücksichtigt');
+  assert.match(modern, /dvh/, 'Höhe berücksichtigt – sonst ragt das Brett quer heraus');
+
+  // Der 780px-Block darf --cs nicht mehr hart setzen, sonst ist die
+  // Hoehenkopplung genau dort wieder weg, wo sie gebraucht wird.
+  const wide = cssCode.slice(cssCode.indexOf('@media(min-width:780px)'));
+  assert.ok(!/--cs\s*:/.test(wide.slice(0, wide.indexOf('}\n}') + 3)),
+    'im Breitbild-Block wird --cs nicht überschrieben');
+});
+
+test('Sichere Bereiche und Leistenhöhe sind berücksichtigt', () => {
+  assert.match(css, /env\(safe-area-inset-bottom\)/, 'Safaris untere Leiste eingeplant');
+  assert.match(css, /var\(--controls-h/, 'Scrollraum richtet sich nach der gemessenen Leiste');
+  assert.match(app, /--controls-h/, 'und der Client misst sie auch');
+  assert.match(css, /#mode-pill:empty\{display:none\}/, 'leere Kapsel wird ausgeblendet');
 });

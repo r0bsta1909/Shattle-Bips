@@ -16,7 +16,10 @@ const SHIP_SYM = {
   schlachtschiff: '⬢',
   kreuzer: '◆',
   uboot: '◉',
-  zerstoerer: '▪',
+  // Variationsselektor U+FE0E erzwingt Textdarstellung. Ohne ihn rendert iOS
+  // das Zeichen als schwarzes Emoji-Quadrat, das neben den hellen Formen der
+  // anderen Schiffe wie ein Fremdkoerper wirkt.
+  zerstoerer: '▪︎',
   decoy: '◌'
 };
 
@@ -709,6 +712,19 @@ $('feedback-form').addEventListener('submit', async (ev) => {
     $('feedback-send').disabled = false;
   }
 });
+
+// ------------------------------------------------- Hoehe der Bedienleiste
+// Die Leiste klebt hochkant unten. Damit sie nichts dauerhaft verdeckt, braucht
+// die Seite darunter genau so viel Luft, wie die Leiste hoch ist. Fest
+// verdrahtet waere das eine Magiezahl, die bei jedem neuen Knopf falsch wird -
+// deshalb gemessen. Faellt die Messung aus, traegt der Standardwert im calc().
+(function trackControlsHeight() {
+  const bar = document.querySelector('.controls');
+  if (!bar || typeof ResizeObserver !== 'function') return;
+  const apply = () => document.documentElement.style.setProperty('--controls-h', `${bar.offsetHeight}px`);
+  new ResizeObserver(apply).observe(bar);
+  apply();
+})();
 
 myToken = localStorage.getItem('nebel.token');
 myCode = localStorage.getItem('nebel.code');

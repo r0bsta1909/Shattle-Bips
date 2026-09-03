@@ -3,7 +3,23 @@
   --bg:#0d1b26; --panel:#132735; --line:#22485f; --ink:#e6f1f6; --muted:#8fb0c2;
   --water:#17394d; --miss:#2a5670; --hit:#c2452f; --sunk:#7a1f14; --ship:#3f6d84;
   --decoy:#4b4030; --accent:#e8b23c; --scan:#5fa8c9;
-  --cs:min(9vw,34px);          /* Zellgröße: skaliert mit dem Viewport */
+  /* Zellgröße. An BEIDE Achsen gekoppelt, damit das Brett immer ganz auf den
+     Schirm passt – hochkant wie quer.
+
+     Die 100px sind alles, was neben den Zellen Breite kostet:
+       Seitenrand 2x12 + Kartenrand 2x14 + Achsenstreifen 16 + Rahmenlücke 3
+       + Rasterrand 2x2 + 9 Lücken a 2 = 93, plus 7px Reserve.
+     Ohne die Reserve waere es eine Punktlandung: auf einem 393px-Schirm exakt
+     393px. Das bricht bei Rundung oder einer sichtbaren Scrollleiste, die in
+     100vw mitzaehlt.
+     Vorher stand hier min(9vw,34px). Das ergab auf jedem iPhone 34px, und mit
+     der Rasterbeschriftung passte das Brett nicht mehr in die Breite.
+
+     dvh statt vh, weil Safaris Leisten ein- und ausfahren. Erste Zeile ist der
+     Rückfall für Browser ohne clamp/min/dvh – eine ungültige Deklaration
+     verwirft nur sich selbst, der Vorgänger bleibt stehen. */
+  --cs:30px;
+  --cs:clamp(24px, min((100vw - 100px) / 10, (100dvh - 190px) / 10), 34px);
 }
 *{box-sizing:border-box}
 html,body{overscroll-behavior-y:contain}
@@ -111,12 +127,20 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 .reveal-wrap{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px}
 
 @media(min-width:780px){
-  :root{--cs:34px}
+  /* Hier stand --cs:34px. Das hat die Hoehenkopplung ausgehebelt: quer ist der
+     Schirm niedrig, und das Brett ragte unten heraus. */
   main{padding:20px}
   h1{font-size:22px}
   .screen#screen-game{display:none}
   .screen#screen-game.active{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start}
-  .controls.sticky{position:static;box-shadow:none;grid-row:span 2}
+  .controls.sticky{position:static;box-shadow:none}
+
+  /* Ausdrueckliche Platzierung, seit die Flottenuebersicht eine eigene Karte
+     ist: als fuenftes Kind wuerde sie sonst in die Gitterautomatik fallen. */
+  .screen#screen-game.active > .board-col,
+  .screen#screen-game.active > .log-card { grid-column:1 }
+  .screen#screen-game.active > .controls { grid-column:2; grid-row:1 }
+  .screen#screen-game.active > .info     { grid-column:2; grid-row:2 / -1 }
   .place-wrap{flex-direction:row}
   .place-side{flex:1;min-width:250px}
   .row.stack>button{flex:0 1 auto}
@@ -159,8 +183,8 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 .grid .cell.sym{font-size:calc(var(--cs) * .52);line-height:1;color:#dceaf2}
 .grid.own .cell.sunk.sym,.grid.own .cell.hit.sym{color:#ffe2db}
 
-/* Flottenuebersicht (#20, #21) */
-.fleet-legend{border-top:1px solid var(--line);margin-top:10px;padding-top:8px}
+/* Flottenuebersicht (#20, #21). Eigene Karte, seit sie nicht mehr im klebenden
+   Bereich haengt – die Trennlinie von damals braucht es hier nicht mehr. */
 .fleet-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .fleet-cols h4{margin:0 0 5px;font-size:12px;color:var(--muted);font-weight:700;
   text-transform:uppercase;letter-spacing:.08em}
@@ -171,13 +195,29 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 .fleet-list li.gone{opacity:.45;text-decoration:line-through}
 .fleet-list li.hurt .name{color:var(--accent)}
 
-/* Bedienleiste klebt unten; ohne Luft darunter verdeckt sie das Raster,
-   und man scrollt am Spielfeld vorbei (#18). */
-#screen-game{padding-bottom:8px}
-@media(max-width:779px){
-  #screen-game{padding-bottom:calc(var(--cs) * 1.2)}
-  .controls.sticky{max-height:52vh;overflow-y:auto}
+/* Die klebende Bedienleiste verdeckte hochkant die halbe Spielflaeche: sie
+   durfte 52vh hoch werden und trug zusaetzlich die Flottenuebersicht. Die ist
+   jetzt eine eigene Karte, die Leiste enthaelt nur noch Zugstand und Aktionen.
+
+   --controls-h setzt der Client aus der gemessenen Hoehe (ResizeObserver).
+   Der Standardwert traegt, solange die Messung nicht da ist. So bleibt unter
+   dem letzten Inhalt genug Platz, damit die Leiste nie etwas dauerhaft
+   verdeckt. */
+#screen-game{padding-bottom:calc(var(--controls-h, 180px) + env(safe-area-inset-bottom) + 12px)}
+
+@media(min-width:780px){
+  /* Zweispaltig steht die Leiste fest, der Zuschlag waere nur leerer Raum. */
+  #screen-game{padding-bottom:12px}
 }
+
+/* Safaris untere Leiste ueberlagert sonst den Seitenfuss – viewport-fit=cover
+   allein reicht nicht, der Abstand muss auch gesetzt werden. */
+main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+.controls.sticky{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+.place-side{padding-bottom:env(safe-area-inset-bottom)}
+
+/* Ohne Inhalt blieb eine leere Kapsel neben "Zeit" stehen. */
+#mode-pill:empty{display:none}
 
 /* Gegnerraster: versenkt hebt sich von blossem Treffer ab (#18). */
 .grid.foe .cell.hit::after{content:"✕";font-size:calc(var(--cs) * .5);color:#ffd9d1;line-height:1}
