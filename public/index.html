@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEBEL – Seeschlacht mit Ködern</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header>
+  <h1>NEBEL</h1>
+  <span class="sub">Seeschlacht · Salve, Köder, Manöver</span>
+  <span id="conn" class="conn">verbinde…</span>
+</header>
+
+<main>
+
+<!-- ------------------------------------------------------ Start -->
+<section id="screen-start" class="screen active">
+  <div class="card">
+    <label for="name">Dein Name</label>
+    <input id="name" maxlength="16" placeholder="Kapitän" autocomplete="off">
+    <div class="row">
+      <button id="btn-create" class="primary">Lobby erstellen</button>
+      <button id="btn-bot">Gegen Bot spielen</button>
+    </div>
+    <div class="row">
+      <input id="code" maxlength="4" placeholder="CODE" class="code-input" autocomplete="off">
+      <button id="btn-join">Lobby beitreten</button>
+    </div>
+    <p class="hint">Server schläft nach 15 Minuten ohne Nutzung ein. Der erste Aufruf kann dann bis zu einer Minute dauern.</p>
+  </div>
+
+  <details class="card rules">
+    <summary>Regeln in 90 Sekunden</summary>
+    <ul>
+      <li><b>Flotte:</b> Träger 5 · Schlachtschiff 4 · Kreuzer 3 · U-Boot 3 · Zerstörer 2. Dazu <b>2 Köder à 2 Feldern</b>. Nichts darf sich berühren, auch nicht diagonal.</li>
+      <li><b>Salve:</b> So viele Schüsse wie du Schiffe hast – mindestens 2, höchstens 4. Der Startspieler hat im ersten Zug nur 1 Schuss.</li>
+      <li><b>Köder</b> melden „Treffer“, werden aber nie versenkt. Du erkennst sie erst, wenn der Trefferblock rundum von Wasser umschlossen ist.</li>
+      <li><b>Manöver:</b> Statt zu feuern ein <i>unbeschädigtes</i> Schiff um 1 Feld versetzen oder drehen. Der Gegner hört nur „Flotte manövriert“.</li>
+      <li><b>Aufklärung</b> (Träger lebt): Ein Schuss der Salve wird zum 3×3-Scan – Antwort ist nur die <i>Anzahl</i> belegter Felder. Köder zählen nicht.</li>
+      <li><b>Tauchen</b> (U-Boot unbeschädigt): kostet einen Schuss. Treffer auf das U-Boot melden „Wasser“, der Gegner erfährt danach nur „U-Boot ausgewichen“.</li>
+      <li><b>Das Orakel lügt nie.</b> Jede Täuschung entsteht daraus, dass wahre Meldungen falsch gelesen werden.</li>
+    </ul>
+  </details>
+</section>
+
+<!-- ------------------------------------------------------ Lobby -->
+<section id="screen-lobby" class="screen">
+  <div class="card">
+    <h2>Lobby <span id="lobby-code" class="code"></span></h2>
+    <div class="row">
+      <input id="join-url" readonly>
+      <button id="btn-copy">Link kopieren</button>
+    </div>
+    <ul id="lobby-players" class="players"></ul>
+    <p class="hint">Beide Spieler stellen ihre Flotte auf. Sobald beide bereit sind, startet die Partie automatisch.</p>
+    <button id="btn-to-placement" class="primary">Flotte aufstellen</button>
+  </div>
+</section>
+
+<!-- ------------------------------------------------- Aufstellung -->
+<section id="screen-placement" class="screen">
+  <div class="card wide">
+    <h2>Aufstellung</h2>
+    <div class="place-wrap">
+      <div id="place-grid" class="grid own"></div>
+      <div class="place-side">
+        <ul id="ship-list" class="ship-list"></ul>
+        <p class="hint" id="place-hint">Schiff wählen, dann Feld anklicken. <b>R</b> oder Rechtsklick dreht.</p>
+        <div class="row">
+          <button id="btn-random">Zufällig</button>
+          <button id="btn-clear">Leeren</button>
+        </div>
+        <button id="btn-ready" class="primary" disabled>Bereit</button>
+        <p id="place-error" class="error"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------ Partie -->
+<section id="screen-game" class="screen">
+  <div class="boards">
+    <div class="board-col">
+      <h3>Gegner: <span id="foe-name">—</span> <span id="foe-ships" class="pill"></span></h3>
+      <div id="foe-grid" class="grid foe"></div>
+    </div>
+    <div class="board-col">
+      <h3>Deine Flotte</h3>
+      <div id="own-grid" class="grid own small"></div>
+    </div>
+  </div>
+
+  <div class="controls card">
+    <div id="turn-banner" class="banner">…</div>
+    <div class="row">
+      <span class="pill">Salve: <b id="shots-left">–</b></span>
+      <span class="pill">Zeit: <b id="clock">–</b></span>
+      <span class="pill">Zeitbank: <b id="bank">–</b></span>
+    </div>
+    <div class="row">
+      <button id="btn-fire" class="primary" disabled>Feuern</button>
+      <button id="btn-scan" disabled>Aufklären</button>
+      <button id="btn-dive" disabled>Tauchen</button>
+      <button id="btn-maneuver" disabled>Manöver</button>
+    </div>
+    <div id="maneuver-panel" class="row hidden">
+      <select id="maneuver-ship"></select>
+      <button data-move="up">↑</button>
+      <button data-move="down">↓</button>
+      <button data-move="left">←</button>
+      <button data-move="right">→</button>
+      <button data-move="rotate">drehen</button>
+      <button id="btn-maneuver-cancel">Abbrechen</button>
+    </div>
+    <p id="game-error" class="error"></p>
+  </div>
+
+  <div class="card log-card">
+    <h3>Funkverkehr</h3>
+    <ul id="log" class="log"></ul>
+  </div>
+</section>
+
+<!-- -------------------------------------------------------- Ende -->
+<section id="screen-end" class="screen">
+  <div class="card">
+    <h2 id="end-title">—</h2>
+    <p id="end-detail" class="hint"></p>
+    <div class="boards">
+      <div class="board-col"><h3>Gegnerische Flotte</h3><div id="reveal-foe" class="grid own small"></div></div>
+      <div class="board-col"><h3>Deine Flotte</h3><div id="reveal-own" class="grid own small"></div></div>
+    </div>
+    <button id="btn-again" class="primary">Neue Partie</button>
+  </div>
+</section>
+
+</main>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>
