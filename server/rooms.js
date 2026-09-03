@@ -1,4 +1,4 @@
-// NEBEL – Lobby- und Partieverwaltung (autoritativ, in-memory)
+// Shattle Bips – Lobby- und Partieverwaltung (autoritativ, in-memory)
 
 import {
   makePlayer, createGame, randomPlacement, validatePlacement, mergeOptions, DEFAULT_OPTIONS,
@@ -58,6 +58,17 @@ export function createRoom(vsBot = false) {
 
 export const getRoom = (code) => rooms.get(String(code || '').toUpperCase());
 
+/**
+ * Raum sofort freigeben: Timer loeschen und aus der Ablage nehmen.
+ * Ohne das haelt ein offener Zug-Timer den Prozess am Leben – im Test war das
+ * der Unterschied zwischen einer und drei Minuten Laufzeit.
+ */
+export function closeRoom(room) {
+  if (!room) return;
+  if (room.timer) { clearTimeout(room.timer); room.timer = null; }
+  rooms.delete(room.code);
+}
+
 export function sweep() {
   for (const [code, room] of rooms) {
     if (now() - room.createdAt > ROOM_TTL_MS) {
@@ -81,7 +92,7 @@ export function joinRoom(room, name, ws) {
   const slot = makeSlot(name, ws);
   room.slots[free] = slot;
   if (room.vsBot && free === 0) {
-    const bot = makeSlot('Nebel-Bot', null, true);
+    const bot = makeSlot('Shattle-Bot', null, true);
     bot.placement = botPlacement(Math.random, room.options);
     bot.ready = true;
     room.slots[1] = bot;
@@ -95,12 +106,31 @@ export function setOptions(room, slotIndex, raw) {
   if (slotIndex !== 0) return { ok: false, error: 'Nur der Host stellt die Regeln ein.' };
   room.options = mergeOptions(raw);
   // Aufstellungen verwerfen, wenn sich die Köderzahl geändert hat
+  let dropped = false;
   for (const s of room.slots) {
     if (!s) continue;
     if (s.isBot) { s.placement = botPlacement(Math.random, room.options); s.ready = true; }
-    else { s.placement = null; s.ready = false; }
+    else {
+      if (s.ready || s.placement) dropped = true;
+      s.placement = null;
+      s.ready = false;
+    }
   }
+  // Wer gerade aufstellt, muss davon erfahren: sonst legt er unter alten Regeln
+  // fertig, bekommt beim "Bereit" eine unverständliche Ablehnung und wartet auf
+  // einen Start, der nie kommt (Issues #5 und #6).
+  if (dropped) broadcast(room, { t: 'notice', kind: 'optionsChanged' });
   return { ok: true, options: room.options };
+}
+
+/** Bereit-Status zuruecknehmen, um die Aufstellung noch einmal zu aendern. */
+export function withdrawPlacement(room, slotIndex) {
+  if (room.status === 'playing') return { ok: false, error: 'Partie läuft bereits.' };
+  const slot = room.slots[slotIndex];
+  if (!slot) return { ok: false, error: 'Unbekannter Platz.' };
+  slot.placement = null;
+  slot.ready = false;
+  return { ok: true };
 }
 
 export function rebind(room, playerToken, ws) {
@@ -157,12 +187,19 @@ export function pushState(room) {
       sunkEnemy: me.sunkEnemy,
       shots: g.turn === i ? requiredShots(g, i) : 0,
       baseSalvo: baseSalvo(g, i),
-      canScan: g.turn === i && shipAlive(me, 'traeger') && !me.scannedThisTurn
+      // Die Optionsflags fehlten hier: bei abgeschalteter Aufklärung blieb der
+      // Knopf bedienbar und der Server wies den Klick erst hinterher ab.
+      canScan: (g.options || {}).scanEnabled !== false
+               && g.turn === i && shipAlive(me, 'traeger') && !me.scannedThisTurn
                && baseSalvo(g, i) - (me.divedThisTurn ? 1 : 0) >= 2,
-      canDive: g.turn === i && !me.divedThisTurn && !me.divedLastTurn
+      canDive: (g.options || {}).diveEnabled !== false
+               && g.turn === i && !me.divedThisTurn && !me.divedLastTurn
                && me.ships.some((sh) => sh.type === 'uboot' && sh.hits.length === 0)
                && baseSalvo(g, i) > 1,
+      // Warum ein Knopf gesperrt ist – sonst raet der Spieler.
+      scanBlocked: scanBlockReason(g, i, me),
       diving: me.diving,
+      endReason: g.endReason || null,
       opponent: { name: room.slots[1 - i]?.name ?? '—', shipsLeft: aliveShips(foe).length, connected: room.slots[1 - i]?.connected !== false },
       winner: g.winner,
       reveal: g.status === 'finished'
@@ -185,6 +222,41 @@ function armTurnTimer(room) {
   room.timer = setTimeout(() => onTimeout(room), ms + 200);
 }
 
+/**
+ * Warum die Aufklärung gerade nicht geht. null = sie geht.
+ * Im Eröffnungszug hat der Startspieler nur 1 Schuss, ein Scan kostet aber
+ * einen und verlangt mindestens 2 – das war fuer Spieler nicht erkennbar
+ * und fuehrte zu "zu wenig Schuesse, obwohl noch keiner genutzt" (Issue #7).
+ */
+function scanBlockReason(g, slot, me) {
+  if (g.turn !== slot) return null;
+  if ((g.options || {}).scanEnabled === false) return 'Aufklärung ist in dieser Partie abgeschaltet.';
+  if (!shipAlive(me, 'traeger')) return 'Träger versenkt – keine Aufklärung mehr.';
+  if (me.scannedThisTurn) return 'In diesem Zug schon aufgeklärt.';
+  if (baseSalvo(g, slot) - (me.divedThisTurn ? 1 : 0) < 2) {
+    return g.turnCount === 0 && slot === g.starter
+      ? 'Eröffnungszug: nur 1 Schuss. Aufklärung braucht mindestens 2.'
+      : 'Zu wenige Schüsse für eine Aufklärung – sie kostet einen davon.';
+  }
+  return null;
+}
+
+/**
+ * Partie beenden – an genau einer Stelle, damit Spiel- und Raumzustand nicht
+ * auseinanderlaufen koennen.
+ *
+ * Vorher setzte onTimeout() nur g.status. room.status blieb auf 'playing',
+ * und voteRematch() lehnte danach mit "Partie läuft noch." ab: Die Revanche
+ * wurde angefragt und nie angenommen (Issue #4).
+ */
+function finishRoom(room, reason) {
+  room.game.status = 'finished';
+  room.game.endReason = reason;
+  room.status = 'finished';
+  clearTimer(room);
+  pushState(room);
+}
+
 function onTimeout(room) {
   const g = room.game;
   if (!g || g.status !== 'playing') return;
@@ -193,10 +265,8 @@ function onTimeout(room) {
   passTurn(g, slot);
   broadcast(room, { t: 'notice', kind: 'timeout', slot });
   if (room.timeoutStreak[slot] >= 2) {
-    g.status = 'finished';
     g.winner = 1 - slot;
-    clearTimer(room);
-    pushState(room);
+    finishRoom(room, 'timeout');
     return;
   }
   afterTurn(room);
@@ -219,6 +289,22 @@ export function tryStart(room) {
   if (!room.slots[0] || !room.slots[1]) return;
   if (!room.slots.every((s) => s.ready && s.placement)) return;
 
+  // makePlayer wirft, wenn eine gespeicherte Aufstellung nicht mehr zu den
+  // Optionen passt. Ungefangen wurde daraus ein blankes "Serverfehler." und
+  // die Lobby blieb haengen. Jetzt wird der betroffene Platz gezielt
+  // zurueckgesetzt und benannt, damit er neu aufstellen kann.
+  for (let i = 0; i < 2; i++) {
+    const check = validatePlacement(room.slots[i].placement, room.options);
+    if (!check.ok) {
+      room.slots[i].placement = null;
+      room.slots[i].ready = false;
+      send(room.slots[i].ws, { t: 'error', msg: `Aufstellung passt nicht mehr zu den Regeln: ${check.error}` });
+      broadcast(room, { t: 'notice', kind: 'placementDropped', who: room.slots[i].name });
+      pushLobby(room);
+      return;
+    }
+  }
+
   const pa = makePlayer(room.slots[0].name, room.slots[0].placement, { isBot: room.slots[0].isBot, options: room.options });
   const pb = makePlayer(room.slots[1].name, room.slots[1].placement, { isBot: room.slots[1].isBot, options: room.options });
   const starter = Math.random() < 0.5 ? 0 : 1;
@@ -237,9 +323,7 @@ export function tryStart(room) {
 function afterTurn(room) {
   const g = room.game;
   if (g.status === 'finished') {
-    room.status = 'finished';
-    clearTimer(room);
-    pushState(room);
+    finishRoom(room, g.endReason || 'allSunk');
     return;
   }
   armTurnTimer(room);

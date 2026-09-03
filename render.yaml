@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: nebel
+    name: shattle-bips
     runtime: node
     plan: free
     buildCommand: npm ci

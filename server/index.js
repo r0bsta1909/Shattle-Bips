@@ -1,4 +1,4 @@
-// NEBEL – Server-Entry: Express (statisch) + WebSocket (Spiel)
+// Shattle Bips – Server-Entry: Express (statisch) + WebSocket (Spiel)
 
 import http from 'node:http';
 import path from 'node:path';
@@ -9,7 +9,7 @@ import { WebSocketServer } from 'ws';
 import {
   createRoom, getRoom, joinRoom, rebind, pushLobby, pushState,
   setPlacement, tryStart, doSalvo, doManeuver, doDive, doScan,
-  sweep, roomCount, randomPlacementForClient, lobbyState, setOptions, voteRematch
+  sweep, roomCount, randomPlacementForClient, lobbyState, setOptions, voteRematch, withdrawPlacement
 } from './rooms.js';
 import { VERSION } from './version.js';
 import { submitFeedback, sweepLimits, feedbackStatus, readMemory, diagnose, explain } from './feedback.js';
@@ -189,6 +189,14 @@ wss.on('connection', (ws) => {
           return;
         }
 
+        case 'withdrawPlacement': {
+          if (!ctx.room) return fail(ws, 'Keine Lobby.');
+          const r = withdrawPlacement(ctx.room, ctx.slot);
+          if (!r.ok) return fail(ws, r.error);
+          ws.send(JSON.stringify({ t: 'placementWithdrawn' }));
+          return pushLobby(ctx.room);
+        }
+
         case 'placeFleet': {
           if (!ctx.room) return fail(ws, 'Keine Lobby.');
           const r = setPlacement(ctx.room, ctx.slot, m.placement);
@@ -258,7 +266,7 @@ setInterval(() => {
 }, 30_000);
 
 server.listen(PORT, async () => {
-  console.log(`NEBEL ${VERSION.label} läuft auf :${PORT}`);
+  console.log(`Shattle Bips ${VERSION.label} läuft auf :${PORT}`);
   // Einmal beim Start pruefen, damit eine falsch gesetzte Variable sofort
   // im Log steht statt erst beim ersten Feedback eines Spielers.
   try { console.log(explain(await diagnose())); } catch { /* Diagnose darf den Start nie verhindern */ }

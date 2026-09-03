@@ -1,4 +1,4 @@
-// NEBEL – Freitext-Feedback aus dem Spiel heraus.
+// Shattle Bips – Freitext-Feedback aus dem Spiel heraus.
 //
 // Drei Senken, per Umgebungsvariable gewaehlt. Der Client kennt keine davon und
 // bekommt auch keine Fehlerdetails: er postet an den eigenen Server, fertig.
@@ -139,7 +139,7 @@ function ghHeaders(token) {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'nebel-feedback',      // ohne UA antwortet GitHub mit 403
+    'User-Agent': 'shattle-bips-feedback',      // ohne UA antwortet GitHub mit 403
     'Content-Type': 'application/json'
   };
 }
@@ -273,7 +273,7 @@ async function toWebhook(text, meta) {
   const url = process.env.FEEDBACK_WEBHOOK_URL;
   if (!url) return { ok: false, error: CONFIG_HINT, reason: 'no-webhook', detail: 'FEEDBACK_WEBHOOK_URL fehlt' };
 
-  const payload = `**NEBEL-Feedback** (${VERSION.label})\n\n${text}\n\n${contextBlock(meta)}`;
+  const payload = `**Shattle Bips-Feedback** (${VERSION.label})\n\n${text}\n\n${contextBlock(meta)}`;
   // "content" ist Discord, "text" ist Slack – beide ignorieren das jeweils andere Feld.
   const res = await fetch(url, {
     method: 'POST',

@@ -1,0 +1,211 @@
+// Shattle Bips – Regressionstests zu den Meldungen aus dem ersten Playtest.
+// Jeder Test benennt das Issue, das ihn ausgeloest hat.
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  createRoom, joinRoom, setOptions, setPlacement, tryStart,
+  voteRematch, withdrawPlacement, lobbyState, pushState, closeRoom
+} from '../server/rooms.js';
+import { randomPlacement, mergeOptions, DEFAULT_OPTIONS, baseSalvo } from '../server/rules.js';
+
+/** Minimaler WebSocket-Ersatz, der die gesendeten Nachrichten sammelt. */
+const fakeWs = () => ({ readyState: 1, sent: [], send(s) { this.sent.push(JSON.parse(s)); } });
+const kinds = (ws) => ws.sent.map((m) => m.kind || m.t);
+const lastState = (ws) => ws.sent.filter((m) => m.t === 'state').pop();
+
+// Raeume nach jedem Test schliessen: ein offener Zug-Timer haelt Node sonst
+// bis zum Ablauf der Zugzeit wach – aus Sekunden werden Minuten.
+const open = [];
+const newRoom = (vsBot = false) => { const r = createRoom(vsBot); open.push(r); return r; };
+test.afterEach(() => { while (open.length) closeRoom(open.pop()); });
+
+/** Botpartie bis zum laufenden Spiel, Zug beim Menschen (Slot 0). */
+function botGame(options) {
+  const room = newRoom(true);
+  const ws = fakeWs();
+  joinRoom(room, 'Rob', ws);
+  if (options) setOptions(room, 0, options);
+  setPlacement(room, 0, randomPlacement(Math.random, room.options));
+  tryStart(room);
+  // Der Startspieler wird ausgelost – fuer den Test festnageln.
+  room.game.turn = 0;
+  ws.sent.length = 0;
+  pushState(room);
+  return { room, ws };
+}
+
+// ---------------------------------------------------------------- Issue #4
+test('#4 Revanche nach Zeitablauf: room.status muss finished sein', () => {
+  const { room } = botGame();
+  assert.equal(room.status, 'playing');
+
+  // Zwei Timeouts in Folge = Aufgabe. Vorher setzte onTimeout nur game.status,
+  // room.status blieb 'playing' und voteRematch lehnte mit "läuft noch" ab.
+  room.game.status = 'finished';
+  room.game.endReason = 'timeout';
+  room.game.winner = 1;
+  room.status = 'finished';
+
+  const res = voteRematch(room, 0);
+  assert.equal(res.ok, true, 'Revanche wird angenommen');
+  assert.equal(res.waiting, false, 'gegen den Bot ohne Warten');
+  assert.equal(room.status, 'lobby', 'Lobby ist wieder offen');
+  assert.equal(room.slots[1].ready, true, 'Bot steht schon');
+  assert.equal(room.slots[0].ready, false, 'Mensch stellt neu auf');
+});
+
+test('#4 Revanche waehrend laufender Partie wird begruendet abgelehnt', () => {
+  const { room } = botGame();
+  const res = voteRematch(room, 0);
+  assert.equal(res.ok, false);
+  assert.match(res.error, /läuft noch/);
+});
+
+test('#4 Zwei Menschen: die Revanche wartet auf den zweiten', () => {
+  const room = newRoom(false);
+  const a = fakeWs(), b = fakeWs();
+  joinRoom(room, 'Rob', a);
+  joinRoom(room, 'Michi', b);
+  room.status = 'finished';
+  room.game = { status: 'finished', winner: 0 };
+
+  assert.equal(voteRematch(room, 0).waiting, true, 'einer allein reicht nicht');
+  assert.ok(kinds(b).includes('rematchWanted'), 'der andere erfaehrt davon');
+  assert.equal(voteRematch(room, 1).waiting, false, 'zu zweit startet sie');
+  assert.equal(room.status, 'lobby');
+});
+
+// ------------------------------------------------------------ Issues #5/#6
+test('#5 Optionsaenderung meldet den Spielern, dass die Aufstellung weg ist', () => {
+  const room = newRoom(false);
+  const a = fakeWs(), b = fakeWs();
+  joinRoom(room, 'Rob', a);
+  joinRoom(room, 'Michi', b);
+
+  setPlacement(room, 0, randomPlacement(Math.random, room.options));
+  setPlacement(room, 1, randomPlacement(Math.random, room.options));
+  assert.ok(room.slots.every((s) => s.ready), 'beide bereit');
+
+  a.sent.length = 0; b.sent.length = 0;
+  setOptions(room, 0, { ...DEFAULT_OPTIONS, turnSeconds: 30 });
+
+  assert.ok(room.slots.every((s) => !s.ready), 'Server hat beide zurueckgesetzt');
+  // Ohne diese Meldung stellte man unter alten Regeln fertig und wartete
+  // danach auf einen Start, der nie kam.
+  assert.ok(kinds(a).includes('optionsChanged'), 'Host wird informiert');
+  assert.ok(kinds(b).includes('optionsChanged'), 'Gast wird informiert');
+});
+
+test('#5 Optionsaenderung ohne verlorene Aufstellung meldet nichts', () => {
+  const room = newRoom(false);
+  const a = fakeWs();
+  joinRoom(room, 'Rob', a);
+  joinRoom(room, 'Michi', fakeWs());
+  a.sent.length = 0;
+  setOptions(room, 0, { ...DEFAULT_OPTIONS, turnSeconds: 45 });
+  assert.ok(!kinds(a).includes('optionsChanged'), 'kein Laerm ohne Verlust');
+});
+
+test('#5 Aufstellung laesst sich zuruecknehmen', () => {
+  const room = newRoom(false);
+  joinRoom(room, 'Rob', fakeWs());
+  joinRoom(room, 'Michi', fakeWs());
+  setPlacement(room, 0, randomPlacement(Math.random, room.options));
+  assert.equal(room.slots[0].ready, true);
+
+  assert.equal(withdrawPlacement(room, 0).ok, true);
+  assert.equal(room.slots[0].ready, false);
+  assert.equal(room.slots[0].placement, null, 'auch die Aufstellung ist weg');
+});
+
+test('#5 tryStart wirft nicht, wenn eine Aufstellung nicht mehr passt', () => {
+  const room = newRoom(false);
+  const a = fakeWs(), b = fakeWs();
+  joinRoom(room, 'Rob', a);
+  joinRoom(room, 'Michi', b);
+
+  setPlacement(room, 0, randomPlacement(Math.random, room.options));
+  setPlacement(room, 1, randomPlacement(Math.random, room.options));
+  // Optionen hart umstellen, ohne die Aufstellungen zu verwerfen. Genau so
+  // entstand der Wurf in makePlayer, aus dem ein blankes "Serverfehler." wurde
+  // und die Lobby haengen blieb.
+  room.options = mergeOptions({ decoyCount: 4 });
+
+  a.sent.length = 0; b.sent.length = 0;
+  assert.doesNotThrow(() => tryStart(room), 'kein ungefangener Wurf');
+  assert.notEqual(room.status, 'playing', 'startet nicht mit kaputter Aufstellung');
+  assert.equal(room.slots[0].ready, false, 'betroffener Platz ist zurueckgesetzt');
+  assert.ok(a.sent.some((m) => m.t === 'error' && /Aufstellung passt nicht/.test(m.msg)),
+    'der Betroffene erfaehrt den Grund');
+});
+
+test('#6 Regulaerer Zweispielerstart funktioniert weiterhin', () => {
+  const room = newRoom(false);
+  joinRoom(room, 'Rob', fakeWs());
+  joinRoom(room, 'Michi', fakeWs());
+  setPlacement(room, 0, randomPlacement(Math.random, room.options));
+  setPlacement(room, 1, randomPlacement(Math.random, room.options));
+  tryStart(room);
+  assert.equal(room.status, 'playing');
+  assert.equal(lobbyState(room).status, 'playing');
+});
+
+// ---------------------------------------------------------------- Issue #7
+test('#7 Eroeffnungszug: Aufklaerung gesperrt, Grund im Klartext', () => {
+  const { room, ws } = botGame();
+  const g = room.game;
+  g.starter = 0; g.turn = 0; g.turnCount = 0;
+  ws.sent.length = 0;
+  pushState(room);
+
+  assert.equal(baseSalvo(g, 0), 1, 'Eröffnungsausgleich lässt nur 1 Schuss');
+  const state = lastState(ws);
+  assert.equal(state.canScan, false, 'Knopf gesperrt');
+  // Vorher stand der Spieler vor einem gesperrten Knopf ohne Begruendung und
+  // las bestenfalls "Zu wenige Schüsse", obwohl er noch keinen genutzt hatte.
+  assert.match(state.scanBlocked, /Eröffnungszug/, 'Grund benannt');
+});
+
+test('#7 Ab dem zweiten Zug ist die Aufklaerung wieder frei', () => {
+  const { room, ws } = botGame();
+  const g = room.game;
+  g.starter = 0; g.turn = 0; g.turnCount = 2;
+  ws.sent.length = 0;
+  pushState(room);
+
+  const state = lastState(ws);
+  assert.equal(state.canScan, true, 'jetzt erlaubt');
+  assert.equal(state.scanBlocked, null, 'und kein Hinweis noetig');
+});
+
+test('#7 Abgeschaltete Aufklaerung sperrt den Knopf, statt den Klick abzuweisen', () => {
+  const { room, ws } = botGame({ ...DEFAULT_OPTIONS, scanEnabled: false, diveEnabled: false });
+  room.game.turn = 0; room.game.turnCount = 2;
+  ws.sent.length = 0;
+  pushState(room);
+
+  const state = lastState(ws);
+  // canScan/canDive prueften die Optionen nicht: der Knopf blieb bedienbar und
+  // der Server wies den Klick erst hinterher ab.
+  assert.equal(state.canScan, false, 'Aufklärung gesperrt');
+  assert.equal(state.canDive, false, 'Tauchen gesperrt');
+  assert.match(state.scanBlocked, /abgeschaltet/, 'Grund benannt');
+});
+
+// ---------------------------------------------------------------- Issue #8
+test('#8 Der Zustand traegt den Grund fuer das Partieende', () => {
+  const { room, ws } = botGame();
+  assert.equal(lastState(ws).endReason, null, 'waehrend der Partie kein Grund');
+
+  room.game.status = 'finished';
+  room.game.endReason = 'timeout';
+  room.game.winner = 1;
+  ws.sent.length = 0;
+  pushState(room);
+
+  // Ein Sieg durch Zeitablauf ohne versenktes Schiff sah wie ein Fehler aus,
+  // weil der Endbildschirm nur "Partie nach N Zügen beendet" zeigte.
+  assert.equal(lastState(ws).endReason, 'timeout');
+});

@@ -1,9 +1,9 @@
 {
-  "name": "nebel",
+  "name": "shattle-bips",
   "version": "0.4.0",
   "private": false,
   "type": "module",
-  "description": "NEBEL – Seeschlacht-Redesign mit Salve, Ködern, Manöver, Aufklärung und Tauchen",
+  "description": "Shattle Bips – Seeschlacht-Redesign mit Salve, Ködern, Manöver, Aufklärung und Tauchen",
   "engines": {
     "node": ">=20"
   },

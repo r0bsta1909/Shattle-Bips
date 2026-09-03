@@ -1,4 +1,4 @@
-// NEBEL – Versionsauskunft. Einmal beim Start aufgeloest, danach konstant.
+// Shattle Bips – Versionsauskunft. Einmal beim Start aufgeloest, danach konstant.
 //
 // Die Build-Nummer leitet sich aus dem Zeitpunkt des Commits ab: bYYMMDD.HHMM
 // in UTC. Sie waechst mit jedem Commit, ist ueberall gleich aufgebaut und

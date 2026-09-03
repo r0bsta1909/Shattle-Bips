@@ -1,4 +1,4 @@
-// NEBEL – Bot v1
+// Shattle Bips – Bot v1
 // Probability-Density-Zielwahl + rudimentaeres Gegnermodell.
 // Eine Stufe, menschlich getunt (keine Schwierigkeitsgrade).
 

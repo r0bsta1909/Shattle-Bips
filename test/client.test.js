@@ -1,4 +1,4 @@
-// NEBEL – Statische Kopplung zwischen Client und Markup.
+// Shattle Bips – Statische Kopplung zwischen Client und Markup.
 //
 // Der Client hat keinen Build-Schritt und keine Typen. Ein $('tippfehler') faellt
 // deshalb erst im Browser auf, und dort nur auf dem Bildschirm, der ihn benutzt.
@@ -31,7 +31,7 @@ test('IDs im HTML sind eindeutig', () => {
 });
 
 test('Kopfzeile trägt Programmstand und Feedback-Knopf', () => {
-  assert.match(html, /<h1>NEBEL <span id="version"/, 'Version steht in der Überschrift');
+  assert.match(html, /<h1>Shattle Bips <span id="version"/, 'Version steht in der Überschrift');
   assert.ok(present.has('btn-feedback'), 'Feedback-Knopf vorhanden');
   assert.match(css, /\.version\{/, 'Version ist gestylt');
 });

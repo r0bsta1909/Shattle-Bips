@@ -1,4 +1,4 @@
-// NEBEL – Feedback: Validierung, Titelbildung, Bremsen, Memory-Senke.
+// Shattle Bips – Feedback: Validierung, Titelbildung, Bremsen, Memory-Senke.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

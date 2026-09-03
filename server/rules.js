@@ -1,4 +1,4 @@
-// NEBEL – Regel-Engine v0.2
+// Shattle Bips – Regel-Engine v0.2
 // Reine Funktionen: kein Netzwerk, kein Timer, kein globaler Zufall.
 // Dieselbe Datei laeuft im Server, im Bot und in tools/sim.mjs.
 

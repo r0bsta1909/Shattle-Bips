@@ -1,4 +1,4 @@
-// NEBEL – GitHub-Senke gegen einen lokalen Nachbau der API.
+// Shattle Bips – GitHub-Senke gegen einen lokalen Nachbau der API.
 // Prueft die Form der Anfrage, nicht GitHub selbst: Header, Titel, Kontextblock,
 // und dass Fehlerdetails im Log bleiben statt beim Absender zu landen.
 

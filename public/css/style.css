@@ -1,4 +1,4 @@
-/* NEBEL – mobile first. Ab 780px zweispaltig. */
+/* Shattle Bips – mobile first. Ab 780px zweispaltig. */
 :root{
   --bg:#0d1b26; --panel:#132735; --line:#22485f; --ink:#e6f1f6; --muted:#8fb0c2;
   --water:#17394d; --miss:#2a5670; --hit:#c2452f; --sunk:#7a1f14; --ship:#3f6d84;
@@ -122,3 +122,7 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
   .row.stack>button{flex:0 1 auto}
   .wide-btn{width:auto}
 }
+
+/* Aufstellung liegt beim Server: sichtbar gesperrt, damit niemand weiterschiebt
+   und der Client hinterher eine andere Flotte zeigt als der Server kennt. */
+.grid.locked{opacity:.6;pointer-events:none;filter:saturate(.6)}

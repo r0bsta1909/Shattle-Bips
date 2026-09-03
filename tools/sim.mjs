@@ -1,4 +1,4 @@
-// NEBEL – Headless-Balancing. Bot gegen Bot auf der echten Regel-Engine.
+// Shattle Bips – Headless-Balancing. Bot gegen Bot auf der echten Regel-Engine.
 //
 // Aufruf: node tools/sim.mjs [Partien] [--option=wert | --flag | --no-flag]
 //

@@ -1,4 +1,4 @@
-// NEBEL – Sim-Kommandozeile: reicht sie die Lobby-Optionen unverfälscht durch?
+// Shattle Bips – Sim-Kommandozeile: reicht sie die Lobby-Optionen unverfälscht durch?
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

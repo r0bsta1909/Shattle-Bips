@@ -1,4 +1,4 @@
-// NEBEL – Client
+// Shattle Bips – Client
 
 const N = 10;
 const FLEET = [
@@ -89,8 +89,15 @@ function handle(m) {
 
     case 'placementOk':
       $('place-error').textContent = '';
-      $('btn-ready').disabled = true;
+      placementLocked = true;
       $('place-hint').textContent = 'Aufstellung übermittelt. Warte auf den Gegner…';
+      renderPlacement();
+      break;
+
+    case 'placementWithdrawn':
+      placementLocked = false;
+      $('place-hint').textContent = 'Aufstellung wieder freigegeben.';
+      renderPlacement();
       break;
 
     case 'started':
@@ -106,8 +113,16 @@ function handle(m) {
       show('screen-lobby');
       break;
 
-    case 'state':
-      state = m; opts = m.options; renderGame(); break;
+    case 'state': {
+      // Modus und Auswahl gehoeren zu genau einem Zug. Blieb der Scan-Modus
+      // ueber den Zugwechsel stehen, loeste der naechste Klick eine Aufklaerung
+      // aus, die der Server dann ablehnte (Issue #7).
+      const turnChanged = !state || state.turn !== m.turn || state.turnCount !== m.turnCount;
+      state = m; opts = m.options;
+      if (turnChanged) { mode = 'normal'; selected.clear(); manShip = null; $('maneuver-panel').classList.add('hidden'); }
+      renderGame();
+      break;
+    }
 
     case 'salvoResult':
       for (const r of m.results) {
@@ -127,6 +142,20 @@ function handle(m) {
       if (m.kind === 'incoming') log(`Beschuss auf ${m.cells.map(coord).join(', ')}.`);
       if (m.kind === 'timeout') log('Zug verfallen – Zeit abgelaufen.');
       if (m.kind === 'rematchWanted') $('rematch-hint').textContent = `${m.by} will die Revanche.`;
+      if (m.kind === 'optionsChanged') {
+        // Der Host hat die Regeln geaendert – der Server hat beide Aufstellungen
+        // verworfen. Ohne diesen Zweig legte man unter alten Regeln fertig und
+        // wartete danach auf einen Start, der nie kam.
+        if (document.querySelector('.screen.active')?.id === 'screen-placement') {
+          startPlacement();
+          $('place-error').textContent = 'Der Host hat die Regeln geändert. Bitte neu aufstellen.';
+        } else {
+          show.pendingPlacement = false;
+        }
+      }
+      if (m.kind === 'placementDropped') {
+        $('place-error').textContent = `${m.who} muss neu aufstellen – die Regeln haben sich geändert.`;
+      }
       break;
 
     case 'randomFleet': loadPlacement(m.placement); break;
@@ -134,6 +163,9 @@ function handle(m) {
     case 'error':
       $('game-error').textContent = m.msg;
       $('place-error').textContent = m.msg;
+      // Auf dem Endbildschirm gibt es kein game-error-Feld – ohne diese Zeile
+      // blieb "Revanche angefragt…" stehen und der Fehler war unsichtbar.
+      $('rematch-hint').textContent = m.msg;
       setTimeout(() => { $('game-error').textContent = ''; }, 4000);
       break;
   }
@@ -166,6 +198,7 @@ $('btn-opts').onclick = () => send({
 
 // -------------------------------------------------------- Aufstellung
 let placeObjects = [], placeSel = 0, placeHoriz = true;
+let placementLocked = false;   // true, sobald der Server die Aufstellung hat
 
 function placeQueue() {
   const q = FLEET.map((f) => ({ ...f, kind: 'ship' }));
@@ -176,7 +209,8 @@ function placeQueue() {
 }
 
 function startPlacement() {
-  placeObjects = []; placeSel = 0; placeHoriz = true;
+  placeObjects = []; placeSel = 0; placeHoriz = true; placementLocked = false;
+  $('place-hint').textContent = '';
   buildGrid($('place-grid'), onPlaceClick, onPlaceHover);
   renderPlacement();
   show('screen-placement');
@@ -207,6 +241,7 @@ function blockedSet() {
 }
 
 function onPlaceHover(i) {
+  if (placementLocked) return;
   const q = placeQueue();
   if (placeSel >= q.length) return;
   for (const el of $('place-grid').children) el.classList.remove('preview', 'bad');
@@ -219,6 +254,7 @@ function onPlaceHover(i) {
 }
 
 function onPlaceClick(i) {
+  if (placementLocked) return;
   const q = placeQueue();
   if (placeSel >= q.length) return;
   const spec = q[placeSel];
@@ -244,11 +280,20 @@ function renderPlacement() {
     li.textContent = `${spec.label} (${spec.len})`;
     if (k < placeObjects.length) li.classList.add('done');
     if (k === placeSel) li.classList.add('active');
-    li.onclick = () => { if (k <= placeObjects.length) { placeObjects = placeObjects.slice(0, k); placeSel = k; renderPlacement(); } };
+    li.onclick = () => { if (!placementLocked && k <= placeObjects.length) { placeObjects = placeObjects.slice(0, k); placeSel = k; renderPlacement(); } };
     ul.appendChild(li);
   });
   $('orient').textContent = placeHoriz ? 'waagerecht' : 'senkrecht';
-  $('btn-ready').disabled = placeObjects.length !== q.length;
+
+  // Solange die Aufstellung beim Server liegt, darf sie hier nicht mehr
+  // veraendert werden. Vorher blieben "Zufaellig" und "Leeren" bedienbar und
+  // renderPlacement() hat den Bereit-Knopf gleich wieder freigeschaltet -
+  // der Client zeigte danach eine andere Flotte als der Server hatte.
+  $('btn-ready').disabled = placementLocked || placeObjects.length !== q.length;
+  $('btn-random').disabled = placementLocked;
+  $('btn-clear').disabled = placementLocked;
+  $('btn-withdraw').classList.toggle('hidden', !placementLocked);
+  $('place-grid').classList.toggle('locked', placementLocked);
 }
 
 function loadPlacement(p) {
@@ -334,6 +379,8 @@ function renderGame() {
 
   $('btn-fire').disabled = !mine || mode !== 'normal' || selected.size !== state.shots;
   $('btn-scan').disabled = !mine || !state.canScan || mode === 'maneuver';
+  $('btn-scan').title = state.canScan ? 'Ein Schuss der Salve wird zum 3×3-Scan' : (state.scanBlocked || '');
+  $('scan-hint').textContent = mine && !state.canScan && state.scanBlocked ? state.scanBlocked : '';
   $('btn-dive').disabled = !mine || !state.canDive;
   $('btn-maneuver').disabled = !mine || !(opts?.maneuverEnabled ?? true);
   $('btn-scan').textContent = mode === 'scan' ? 'Scan abbrechen' : 'Aufklären';
@@ -395,8 +442,16 @@ function onFoeClick(i) {
 }
 
 function renderEnd() {
-  $('end-title').textContent = state.winner === state.you ? 'Gewonnen.' : 'Verloren.';
-  $('end-detail').textContent = `Partie nach ${state.turnCount} Zügen beendet.`;
+  const won = state.winner === state.you;
+  $('end-title').textContent = won ? 'Gewonnen.' : 'Verloren.';
+  // Ohne Grund wirkte ein Sieg durch Zeitablauf wie ein Fehler: die Partie war
+  // vorbei, ohne dass ein Schiff versenkt wurde (Issue #8).
+  const reason = state.endReason === 'timeout'
+    ? (won
+        ? 'Der Gegner hat zwei Züge in Folge verstreichen lassen – das gilt als Aufgabe.'
+        : 'Du hast zwei Züge in Folge verstreichen lassen – das gilt als Aufgabe.')
+    : 'Alle fünf Schiffe versenkt.';
+  $('end-detail').textContent = `${reason} Partie nach ${state.turnCount} Zügen beendet.`;
   const paint = (elId, view) => {
     const el = $(elId);
     if (!el.children.length) buildGrid(el, null, null);
@@ -423,8 +478,9 @@ $('btn-join').onclick = () => {
 };
 $('btn-copy').onclick = () => navigator.clipboard?.writeText($('join-url').value);
 $('btn-to-placement').onclick = startPlacement;
-$('btn-random').onclick = () => send({ t: 'randomFleet' });
-$('btn-clear').onclick = () => { placeObjects = []; placeSel = 0; renderPlacement(); };
+$('btn-random').onclick = () => { if (!placementLocked) send({ t: 'randomFleet' }); };
+$('btn-clear').onclick = () => { if (!placementLocked) { placeObjects = []; placeSel = 0; renderPlacement(); } };
+$('btn-withdraw').onclick = () => send({ t: 'withdrawPlacement' });
 $('btn-rotate').onclick = () => { placeHoriz = !placeHoriz; renderPlacement(); };
 $('btn-ready').onclick = () => send({
   t: 'placeFleet',

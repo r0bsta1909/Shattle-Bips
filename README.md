@@ -1,4 +1,4 @@
-# NEBEL
+# Shattle Bips
 
 Ein Redesign von *Schiffe versenken* für 14–99: Salve statt Einzelschuss, zwei Köder, die
 sich als Schiffe ausgeben, ein U-Boot, das ausweicht, ein Träger, der aufklärt — und die
@@ -11,7 +11,7 @@ Online-Duell im Browser oder gegen den Bot. Kein Build-Schritt, kein Framework, 
 ## Warum das Ganze
 
 Das Original ist nach fünf Partien durchschaut: Spieleragency endet mit der Aufstellung, der
-Rest ist eine gelöste Suchaufgabe. NEBEL setzt drei Effekte dagegen, die nach dem Aufstellen
+Rest ist eine gelöste Suchaufgabe. Shattle Bips setzt drei Effekte dagegen, die nach dem Aufstellen
 weiterlaufen:
 
 - **Antizipation** — der Gegner sendet Signale („Flotte manövriert", „U-Boot ausgewichen"), die du lesen musst.
@@ -121,7 +121,7 @@ wieder in beiden Zielkorridoren (52,4 % / 40,2 %). Und er verlängert die Partie
 ## Tests
 
 ```bash
-npm test              # 58 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung
+npm test              # 70 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung, Playtest-Regressionen
 npm run e2e           # vollständige Partie gegen den Bot über WebSocket
 npm run e2e:lobby     # zwei Clients, Lobby erstellen + beitreten
 npm run e2e:options   # Optionen, Zug-Timeout und Revanche
@@ -157,7 +157,7 @@ server/version.js  Programmstand aus package.json, git und den Render-Variablen
 server/feedback.js Freitext-Feedback, drei Senken, Missbrauchsbremse
 public/            Client ohne Build-Schritt (ES-Module, DOM-Raster)
 tools/sim.mjs      Headless-Balancing auf derselben Engine, mit denselben Optionen
-test/              Regeltests, Sim-CLI, Feedback, Client-Kopplung + vier End-to-End-Tests
+test/              Regeltests, Sim-CLI, Feedback, Client-Kopplung, Playtest-Regressionen + vier End-to-End-Tests
 ```
 
 **Der Server ist autoritativ.** Der Client erhält niemals die gegnerische Flotte — nur sein
@@ -177,7 +177,7 @@ Bot gegen Bot auf der echten Engine, 800 Partien (`npm run sim -- 800`):
 | Schüsse des Siegers | Median 51 | — |
 | Züge gesamt | Ø 38,5 | — |
 
-Zum Vergleich: Klassisches Schiffe versenken mit optimalem Bot liegt bei ~42 Schüssen. NEBEL
+Zum Vergleich: Klassisches Schiffe versenken mit optimalem Bot liegt bei ~42 Schüssen. Shattle Bips
 liegt höher, weil Köder, Manöver und Tauchen echte Kosten verursachen.
 
 **Grenze dieser Zahlen:** Der Bot hat nur ein rudimentäres Gegnermodell. Er blufft nach Plan,
@@ -193,11 +193,13 @@ Zahlen sind eine Untergrenze und ersetzen keinen Playtest mit Menschen.
 - **Ein Client-Modul** (`public/js/app.js`) statt fünf. Bei dieser Größe ist die Aufteilung Ballast.
 - **Neue Regel: Ausweich-Rücksetzung.** Der Sim deckte auf, dass ein getauchtes U-Boot sonst dauerhaft unversenkbar wird — das betroffene Feld bliebe für immer als Wasser markiert und ~3 % der Partien liefen endlos. Deshalb werden nach einem Ausweichmanöver alle Wasser-Meldungen der Salve zurückgesetzt.
 - **Scan und Tauchen senken die Salve auf minimal 1** (nicht 2). Sonst wären beide bei zwei verbliebenen Schiffen kostenlos.
-- **Kein Zeitbank-System.** Ein abgelaufener Zug geht an den Gegner. Die Bank hatte den Timer faktisch mehrfach neu gestartet, was wie ein Fehler wirkte statt wie eine Regel. Zwei Timeouts in Folge gelten als Aufgabe.
+- **Kein Zeitbank-System.** Ein abgelaufener Zug geht an den Gegner. Die Bank hatte den Timer faktisch mehrfach neu gestartet, was wie ein Fehler wirkte statt wie eine Regel. Zwei Timeouts in Folge gelten als Aufgabe — der Endbildschirm sagt das seit dem ersten Playtest auch dazu, vorher sah ein Sieg ohne versenktes Schiff wie ein Fehler aus.
+- **Der Server sagt, warum ein Knopf gesperrt ist.** `canScan`/`canDive` reichen dem Client nicht nur ein Ja/Nein, sondern mit `scanBlocked` auch den Grund. Ein gesperrter Knopf ohne Begründung erzeugt sonst genau die Fehlermeldungen, die im Playtest kamen.
+- **Die Aufstellung ist gesperrt, sobald der Server sie hat.** Sonst ändert der Client sie weiter, während der Server die alte hält — der Spieler sieht dann eine andere Flotte, als gespielt wird.
 
 ## Programmstand und Feedback
 
-Im Kopf steht dauerhaft der Programmstand, z. B. `NEBEL v0.4.0 · b260903.1106`. Die Build-Nummer
+Im Kopf steht dauerhaft der Programmstand, z. B. `Shattle Bips v0.4.0 · b260903.1106`. Die Build-Nummer
 ist der Zeitpunkt des Commits als `bYYMMDD.HHMM` in UTC — sie wächst mit jedem Commit, ist
 überall gleich aufgebaut und lässt zwei Stände direkt vergleichen. Der Server löst sie einmal
 beim Start auf: `APP_BUILD` / `APP_COMMIT`, sonst `git`, sonst `RENDER_GIT_COMMIT`. Fällt alles
