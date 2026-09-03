@@ -90,13 +90,13 @@ function handle(m) {
     case 'placementOk':
       $('place-error').textContent = '';
       placementLocked = true;
-      $('place-hint').textContent = 'Aufstellung übermittelt. Warte auf den Gegner…';
+      $('place-status').textContent = 'Aufstellung übermittelt. Warte auf den Gegner…';
       renderPlacement();
       break;
 
     case 'placementWithdrawn':
       placementLocked = false;
-      $('place-hint').textContent = 'Aufstellung wieder freigegeben.';
+      $('place-status').textContent = 'Aufstellung wieder freigegeben.';
       renderPlacement();
       break;
 
@@ -210,7 +210,10 @@ function placeQueue() {
 
 function startPlacement() {
   placeObjects = []; placeSel = 0; placeHoriz = true; placementLocked = false;
-  $('place-hint').textContent = '';
+  // Nicht place-hint: dort steckt <b id="orient"> drin, und textContent = ''
+  // haette es aus dem DOM geloescht – renderPlacement() greift zwei Zeilen
+  // spaeter darauf zu und warf danach bei jedem Klick auf "Flotte aufstellen".
+  $('place-status').textContent = '';
   buildGrid($('place-grid'), onPlaceClick, onPlaceHover);
   renderPlacement();
   show('screen-placement');

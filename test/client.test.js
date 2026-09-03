@@ -52,3 +52,54 @@ test('Client holt Version und postet Feedback an den eigenen Server', () => {
   assert.ok(!/api\.github\.com/.test(app), 'kein GitHub-Zugriff aus dem Browser');
   assert.ok(!/GITHUB_TOKEN/.test(app), 'kein Token im Client');
 });
+
+/**
+ * Ermittelt die IDs, deren Element im HTML weitere IDs enthaelt.
+ * Kleiner Tiefenzaehler statt echtem Parser – reicht fuer dieses Markup.
+ */
+function containerIds(markup) {
+  const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img',
+    'input', 'link', 'meta', 'source', 'track', 'wbr']);
+  const stack = [];
+  const containers = new Set();
+  const tag = /<(\/?)([a-zA-Z][\w-]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/g;
+
+  for (let m; (m = tag.exec(markup));) {
+    const [, closing, name, attrs] = m;
+    if (closing) { stack.pop(); continue; }
+    if (VOID.has(name.toLowerCase()) || /\/\s*$/.test(attrs)) {
+      // Selbstschliessend: kann trotzdem eine ID in einen Container legen.
+      const id = (attrs.match(/\bid="([^"]+)"/) || [])[1];
+      if (id) for (const open of stack) if (open) containers.add(open);
+      continue;
+    }
+    const id = (attrs.match(/\bid="([^"]+)"/) || [])[1] || null;
+    if (id) for (const open of stack) if (open) containers.add(open);
+    stack.push(id);
+  }
+  return containers;
+}
+
+test('Kein textContent/innerHTML auf ein Element, das andere IDs enthält', () => {
+  // Loeste Issues #9 und #10 aus: <b id="orient"> steckt in <p id="place-hint">.
+  // Ein $('place-hint').textContent = '' loescht damit #orient aus dem DOM,
+  // und der naechste $('orient')-Zugriff wirft. Statisch sichtbar, sobald man
+  // Schreibziele mit der Verschachtelung im Markup abgleicht.
+  const containers = containerIds(html);
+  assert.ok(containers.has('place-hint'), 'Selbsttest: place-hint enthält #orient');
+
+  const writes = [...app.matchAll(/\$\(\s*'([^']+)'\s*\)\s*\.\s*(textContent|innerHTML)\s*=/g)]
+    .map((m) => ({ id: m[1], prop: m[2] }));
+
+  const kaputt = writes.filter((w) => containers.has(w.id));
+  assert.deepEqual(kaputt, [],
+    `Diese Zuweisungen löschen verschachtelte Elemente: ${kaputt.map((w) => `$('${w.id}').${w.prop}`).join(', ')}`);
+});
+
+test('Aufstellung: Anleitung und Statusmeldung sind getrennte Elemente', () => {
+  assert.ok(present.has('place-hint'), 'Anleitung mit #orient');
+  assert.ok(present.has('place-status'), 'eigenes Feld für Statusmeldungen');
+  assert.match(html, /id="place-hint"[^>]*>[^<]*<b id="orient"/, '#orient liegt in der Anleitung');
+  assert.match(app, /\$\('place-status'\)\.textContent/, 'Status geht nach place-status');
+  assert.ok(!/\$\('place-hint'\)\.textContent\s*=/.test(app), 'und nie mehr nach place-hint');
+});
