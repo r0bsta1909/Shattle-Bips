@@ -9,7 +9,7 @@ import { WebSocketServer } from 'ws';
 import {
   createRoom, getRoom, joinRoom, rebind, pushLobby, pushState,
   setPlacement, tryStart, doSalvo, doManeuver, doDive, doScan,
-  sweep, roomCount, randomPlacementForClient, lobbyState
+  sweep, roomCount, randomPlacementForClient, lobbyState, setOptions, voteRematch
 } from './rooms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -90,7 +90,21 @@ wss.on('connection', (ws) => {
         }
 
         case 'randomFleet':
-          return ws.send(JSON.stringify({ t: 'randomFleet', placement: randomPlacementForClient() }));
+          return ws.send(JSON.stringify({ t: 'randomFleet', placement: randomPlacementForClient(ctx.room) }));
+
+        case 'setOptions': {
+          if (!ctx.room) return fail(ws, 'Keine Lobby.');
+          const r = setOptions(ctx.room, ctx.slot, m.options);
+          if (!r.ok) return fail(ws, r.error);
+          return pushLobby(ctx.room);
+        }
+
+        case 'rematch': {
+          if (!ctx.room) return fail(ws, 'Keine Lobby.');
+          const r = voteRematch(ctx.room, ctx.slot);
+          if (!r.ok) return fail(ws, r.error);
+          return;
+        }
 
         case 'placeFleet': {
           if (!ctx.room) return fail(ws, 'Keine Lobby.');

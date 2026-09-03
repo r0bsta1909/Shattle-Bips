@@ -8,17 +8,17 @@ const FLEET = [
   { type: 'uboot', label: 'U-Boot', len: 3 },
   { type: 'zerstoerer', label: 'Zerstörer', len: 2 }
 ];
-const DECOYS = [{ type: 'decoy', label: 'Köder 1', len: 2 }, { type: 'decoy', label: 'Köder 2', len: 2 }];
 
 const $ = (id) => document.getElementById(id);
 const ix = (r, c) => r * N + c;
 const rc = (i) => [Math.floor(i / N), i % N];
+const coord = (i) => { const [r, c] = rc(i); return `${String.fromCharCode(65 + c)}${r + 1}`; };
+
+let ws = null, myToken = null, myCode = null, mySlot = null, isHost = false;
+let state = null, opts = null, mode = 'normal', selected = new Set();
+let manShip = null, deadline = 0, clockTimer = null;
 
 // ------------------------------------------------------------------- Netz
-let ws = null, myToken = null, myCode = null, mySlot = null;
-let state = null, mode = 'normal', selected = new Set(), scanCenter = null;
-let deadline = 0, clockTimer = null;
-
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -27,10 +27,7 @@ function connect() {
     send({ t: 'hello', name: nameValue(), code: myCode, token: myToken });
     setInterval(() => { if (ws.readyState === 1) send({ t: 'ping' }); }, 300_000);
   };
-  ws.onclose = () => {
-    $('conn').textContent = 'getrennt – verbinde neu…';
-    setTimeout(connect, 2000);
-  };
+  ws.onclose = () => { $('conn').textContent = 'getrennt – verbinde neu…'; setTimeout(connect, 2000); };
   ws.onmessage = (ev) => handle(JSON.parse(ev.data));
 }
 const send = (m) => ws && ws.readyState === 1 && ws.send(JSON.stringify(m));
@@ -41,15 +38,15 @@ function nameValue() {
   return v || 'Kapitän';
 }
 
-// ------------------------------------------------------------- Screens
 function show(id) {
   for (const s of document.querySelectorAll('.screen')) s.classList.remove('active');
   $(id).classList.add('active');
+  window.scrollTo(0, 0);
 }
 
-function log(text, strong = false) {
+function log(html) {
   const li = document.createElement('li');
-  li.innerHTML = strong ? `<b>${text}</b>` : text;
+  li.innerHTML = html;
   $('log').prepend(li);
 }
 
@@ -59,58 +56,81 @@ function handle(m) {
     case 'welcome':
       if (m.resumed) { mySlot = m.playerId; myCode = m.code; }
       break;
+
     case 'joined':
       myCode = m.code; myToken = m.token; mySlot = m.playerId;
+      isHost = m.playerId === 0;
       localStorage.setItem('nebel.token', myToken);
       localStorage.setItem('nebel.code', myCode);
       $('lobby-code').textContent = m.code;
       $('join-url').value = `${location.origin}/#${m.code}`;
       show('screen-lobby');
-      if (m.vsBot) startPlacement();
       break;
+
     case 'lobby': {
+      opts = m.options;
+      applyOptionsToForm(opts);
       $('lobby-code').textContent = m.code;
       const ul = $('lobby-players'); ul.innerHTML = '';
-      for (const p of m.players) {
+      m.players.forEach((p, k) => {
         const li = document.createElement('li');
-        li.textContent = p ? `${p.name}${p.bot ? ' (Bot)' : ''} — ${p.ready ? 'bereit' : 'stellt auf…'}` : 'wartet auf Mitspieler…';
+        li.textContent = p
+          ? `${p.name}${p.bot ? ' (Bot)' : ''}${k === mySlot ? ' – du' : ''} — ${p.ready ? 'bereit' : 'stellt auf…'}`
+          : 'wartet auf Mitspieler…';
         ul.appendChild(li);
-      }
+      });
+      const canEdit = mySlot === 0;
+      $('opt-owner').textContent = canEdit ? '' : '(nur der Host stellt ein)';
+      for (const el of document.querySelectorAll('.opts input')) el.disabled = !canEdit;
+      $('btn-opts').disabled = !canEdit;
+      if (show.pendingPlacement) { show.pendingPlacement = false; startPlacement(); }
       break;
     }
+
     case 'placementOk':
       $('place-error').textContent = '';
       $('btn-ready').disabled = true;
       $('place-hint').textContent = 'Aufstellung übermittelt. Warte auf den Gegner…';
       break;
+
     case 'started':
+      selected.clear(); mode = 'normal'; manShip = null;
+      $('log').innerHTML = '';
       show('screen-game');
-      log('Partie gestartet.', true);
+      log('<b>Partie gestartet.</b>');
       break;
+
+    case 'rematch':
+      $('rematch-hint').textContent = '';
+      show.pendingPlacement = true;
+      show('screen-lobby');
+      break;
+
     case 'state':
-      state = m; renderGame(); break;
+      state = m; opts = m.options; renderGame(); break;
+
     case 'salvoResult':
       for (const r of m.results) {
-        const [r0, c0] = rc(r.cell);
-        const coord = `${String.fromCharCode(65 + c0)}${r0 + 1}`;
-        if (r.result === 'water') log(`${coord}: Wasser.`);
-        else if (r.result === 'hit') log(`${coord}: <b>Treffer.</b>`);
-        else log(`${coord}: <b>${r.shipLabel} versenkt!</b>`, false);
+        if (r.result === 'water') log(`${coord(r.cell)}: Wasser.`);
+        else if (r.result === 'hit') log(`${coord(r.cell)}: <b>Treffer.</b>`);
+        else log(`${coord(r.cell)}: <b>${r.shipLabel} versenkt!</b>`);
       }
       break;
-    case 'scanResult': {
-      const [r0, c0] = rc(m.center);
-      log(`Aufklärung um ${String.fromCharCode(65 + c0)}${r0 + 1}: <b>${m.count}</b> belegte Felder.`);
+
+    case 'scanResult':
+      log(`Aufklärung um <b>${coord(m.center)}</b>: <b>${m.count}</b> belegte Felder im 3×3-Feld.`);
       break;
-    }
+
     case 'notice':
       if (m.kind === 'maneuvered') log('Gegnermeldung: <b>Flotte manövriert.</b>');
-      if (m.kind === 'evaded') log('Meldung: <b>U-Boot ausgewichen.</b> Einer deiner „Wasser“-Treffer war keiner.');
-      if (m.kind === 'incoming') log(`Beschuss auf ${m.cells.length} Feld(er).`);
-      if (m.kind === 'timeout') log('Zug verfallen (Zeit abgelaufen).');
+      if (m.kind === 'evaded') log('<b>U-Boot ausgewichen.</b> Die Wasser-Meldungen dieser Salve sind zurückgesetzt.');
+      if (m.kind === 'incoming') log(`Beschuss auf ${m.cells.map(coord).join(', ')}.`);
+      if (m.kind === 'timeout') log('Zug verfallen – Zeit abgelaufen.');
+      if (m.kind === 'rematchWanted') $('rematch-hint').textContent = `${m.by} will die Revanche.`;
       break;
-    case 'randomFleet':
-      loadPlacement(m.placement); break;
+
+    case 'randomFleet': loadPlacement(m.placement); break;
+
     case 'error':
       $('game-error').textContent = m.msg;
       $('place-error').textContent = m.msg;
@@ -119,17 +139,44 @@ function handle(m) {
   }
 }
 
+// ------------------------------------------------------ Einstellungen
+function applyOptionsToForm(o) {
+  if (!o) return;
+  $('o-min').value = o.minSalvo; $('o-max').value = o.maxSalvo;
+  $('o-decoys').value = o.decoyCount; $('o-decoylen').value = o.decoyLen;
+  $('o-time').value = o.turnSeconds;
+  $('o-opening').checked = o.openingBalance;
+  $('o-single').checked = o.singleShotAfterHit;
+  $('o-scan').checked = o.scanEnabled;
+  $('o-dive').checked = o.diveEnabled;
+  $('o-man').checked = o.maneuverEnabled;
+}
+
+$('btn-opts').onclick = () => send({
+  t: 'setOptions',
+  options: {
+    minSalvo: +$('o-min').value, maxSalvo: +$('o-max').value,
+    decoyCount: +$('o-decoys').value, decoyLen: +$('o-decoylen').value,
+    turnSeconds: +$('o-time').value,
+    openingBalance: $('o-opening').checked, singleShotAfterHit: $('o-single').checked,
+    scanEnabled: $('o-scan').checked, diveEnabled: $('o-dive').checked,
+    maneuverEnabled: $('o-man').checked
+  }
+});
+
 // -------------------------------------------------------- Aufstellung
-let placeObjects = [];      // {kind,type,label,len,r,c,horiz,cells}
-let placeSel = 0, placeHoriz = true;
+let placeObjects = [], placeSel = 0, placeHoriz = true;
 
 function placeQueue() {
-  return [...FLEET.map((f) => ({ ...f, kind: 'ship' })), ...DECOYS.map((d) => ({ ...d, kind: 'decoy' }))];
+  const q = FLEET.map((f) => ({ ...f, kind: 'ship' }));
+  const n = opts ? opts.decoyCount : 2;
+  const len = opts ? opts.decoyLen : 2;
+  for (let i = 0; i < n; i++) q.push({ kind: 'decoy', type: 'decoy', label: `Köder ${i + 1}`, len });
+  return q;
 }
 
 function startPlacement() {
-  placeObjects = [];
-  placeSel = 0; placeHoriz = true;
+  placeObjects = []; placeSel = 0; placeHoriz = true;
   buildGrid($('place-grid'), onPlaceClick, onPlaceHover);
   renderPlacement();
   show('screen-placement');
@@ -145,10 +192,9 @@ function cellsFor(r, c, len, horiz) {
   return out;
 }
 
-function blockedSet(exceptIndex = -1) {
+function blockedSet() {
   const s = new Set();
-  placeObjects.forEach((o, k) => {
-    if (k === exceptIndex) return;
+  for (const o of placeObjects) {
     for (const i of o.cells) {
       const [r, c] = rc(i);
       for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
@@ -156,17 +202,16 @@ function blockedSet(exceptIndex = -1) {
         if (rr >= 0 && rr < N && cc >= 0 && cc < N) s.add(ix(rr, cc));
       }
     }
-  });
+  }
   return s;
 }
 
 function onPlaceHover(i) {
   const q = placeQueue();
   if (placeSel >= q.length) return;
-  const spec = q[placeSel];
-  const [r, c] = rc(i);
-  const cells = cellsFor(r, c, spec.len, placeHoriz);
   for (const el of $('place-grid').children) el.classList.remove('preview', 'bad');
+  const [r, c] = rc(i);
+  const cells = cellsFor(r, c, q[placeSel].len, placeHoriz);
   if (!cells) return;
   const blocked = blockedSet();
   const ok = !cells.some((x) => blocked.has(x));
@@ -179,8 +224,8 @@ function onPlaceClick(i) {
   const spec = q[placeSel];
   const [r, c] = rc(i);
   const cells = cellsFor(r, c, spec.len, placeHoriz);
-  if (!cells) return;
-  if (cells.some((x) => blockedSet().has(x))) { $('place-error').textContent = 'Dort ist kein Platz – ein Feld Abstand ist Pflicht.'; return; }
+  if (!cells) { $('place-error').textContent = 'Passt dort nicht ins Raster.'; return; }
+  if (cells.some((x) => blockedSet().has(x))) { $('place-error').textContent = 'Kein Platz – ein Feld Abstand ist Pflicht.'; return; }
   $('place-error').textContent = '';
   placeObjects.push({ ...spec, r, c, horiz: placeHoriz, cells });
   placeSel = placeObjects.length;
@@ -190,9 +235,8 @@ function onPlaceClick(i) {
 function renderPlacement() {
   const grid = $('place-grid');
   for (const el of grid.children) el.className = 'cell';
-  for (const o of placeObjects) {
-    for (const i of o.cells) grid.children[i].classList.add(o.kind === 'decoy' ? 'decoy' : 'ship');
-  }
+  for (const o of placeObjects) for (const i of o.cells) grid.children[i].classList.add(o.kind === 'decoy' ? 'decoy' : 'ship');
+
   const q = placeQueue();
   const ul = $('ship-list'); ul.innerHTML = '';
   q.forEach((spec, k) => {
@@ -203,19 +247,21 @@ function renderPlacement() {
     li.onclick = () => { if (k <= placeObjects.length) { placeObjects = placeObjects.slice(0, k); placeSel = k; renderPlacement(); } };
     ul.appendChild(li);
   });
+  $('orient').textContent = placeHoriz ? 'waagerecht' : 'senkrecht';
   $('btn-ready').disabled = placeObjects.length !== q.length;
 }
 
 function loadPlacement(p) {
   placeObjects = [];
+  const q = placeQueue();
   for (const s of p.ships) {
     const spec = FLEET.find((f) => f.type === s.type);
     placeObjects.push({ ...spec, kind: 'ship', r: s.r, c: s.c, horiz: s.horiz, cells: cellsFor(s.r, s.c, spec.len, s.horiz) });
   }
-  // Reihenfolge an die Warteschlange angleichen
-  placeObjects.sort((a, b) => placeQueue().findIndex((q) => q.type === a.type) - placeQueue().findIndex((q) => q.type === b.type));
+  placeObjects.sort((a, b) => q.findIndex((x) => x.type === a.type) - q.findIndex((x) => x.type === b.type));
   p.decoys.forEach((d, k) => {
-    placeObjects.push({ ...DECOYS[k], kind: 'decoy', r: d.r, c: d.c, horiz: d.horiz, cells: cellsFor(d.r, d.c, 2, d.horiz) });
+    const len = opts ? opts.decoyLen : 2;
+    placeObjects.push({ kind: 'decoy', type: 'decoy', label: `Köder ${k + 1}`, len, r: d.r, c: d.c, horiz: d.horiz, cells: cellsFor(d.r, d.c, len, d.horiz) });
   });
   placeSel = placeObjects.length;
   renderPlacement();
@@ -239,38 +285,43 @@ function renderGame() {
   if (state.status === 'finished') return renderEnd();
 
   const foe = $('foe-grid');
-  if (!foe.children.length) {
-    buildGrid(foe, onFoeClick, onFoeHover);
-    buildGrid($('own-grid'), null, null);
-  }
+  if (!foe.children.length) { buildGrid(foe, onFoeClick, onFoeHover); buildGrid($('own-grid'), onOwnClick, null); }
 
-  // Gegnerbrett
+  // Gegnerbrett inkl. Scan-Historie
   for (let i = 0; i < N * N; i++) {
     const el = foe.children[i];
-    el.className = 'cell';
+    el.className = 'cell'; el.textContent = '';
     const v = state.tracking[i];
     if (v === 1) el.classList.add('miss');
     if (v === 2) el.classList.add('hit');
     if (selected.has(i)) el.classList.add('sel');
   }
+  for (const s of state.scans || []) {
+    const [r, c] = rc(s.center);
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      foe.children[ix(r + dr, c + dc)].classList.add('scanned');
+    }
+    const ctr = foe.children[s.center];
+    ctr.classList.add('scancenter');
+    ctr.textContent = s.count;
+  }
 
   // eigenes Brett
   const own = $('own-grid');
-  for (let i = 0; i < N * N; i++) own.children[i].className = 'cell';
-  for (const s of state.own.ships) {
+  for (let i = 0; i < N * N; i++) { own.children[i].className = 'cell'; own.children[i].textContent = ''; }
+  state.own.ships.forEach((s) => {
     for (const i of s.cells) {
       const el = own.children[i];
       el.classList.add(s.sunk ? 'sunk' : (s.hits.includes(i) ? 'hit' : 'ship'));
+      if (manShip === s.index) el.classList.add('manship');
     }
-  }
-  for (const d of state.own.decoys) {
-    for (const i of d.cells) own.children[i].classList.add(d.hits.includes(i) ? 'hit' : 'decoy');
-  }
+  });
+  for (const d of state.own.decoys) for (const i of d.cells) own.children[i].classList.add(d.hits.includes(i) ? 'hit' : 'decoy');
   for (const i of state.own.incoming) {
-    if (!own.children[i].classList.contains('hit') && !own.children[i].classList.contains('sunk')) {
-      own.children[i].classList.add('miss');
-    }
+    const el = own.children[i];
+    if (!el.classList.contains('hit') && !el.classList.contains('sunk')) el.classList.add('miss');
   }
+  if (mode === 'maneuver' && manShip !== null) previewManeuver();
 
   $('foe-name').textContent = state.opponent.name;
   $('foe-ships').textContent = `${state.opponent.shipsLeft} Schiffe`;
@@ -278,30 +329,43 @@ function renderGame() {
   $('turn-banner').textContent = mine ? 'Du bist am Zug.' : `${state.opponent.name} ist am Zug…`;
   $('turn-banner').classList.toggle('you', mine);
   $('shots-left').textContent = mine ? `${selected.size}/${state.shots}` : '–';
-  $('bank').textContent = `${Math.round(state.bank / 1000)} s`;
+  $('mode-pill').textContent = mode === 'scan' ? 'Scan-Ziel wählen' : (mode === 'maneuver' ? 'Manövermodus' : (state.diving ? 'U-Boot getaucht' : ''));
   deadline = state.deadline;
 
   $('btn-fire').disabled = !mine || mode !== 'normal' || selected.size !== state.shots;
   $('btn-scan').disabled = !mine || !state.canScan || mode === 'maneuver';
   $('btn-dive').disabled = !mine || !state.canDive;
-  $('btn-maneuver').disabled = !mine;
-  $('btn-scan').textContent = mode === 'scan' ? 'Scan-Ziel wählen…' : 'Aufklären';
+  $('btn-maneuver').disabled = !mine || !(opts?.maneuverEnabled ?? true);
+  $('btn-scan').textContent = mode === 'scan' ? 'Scan abbrechen' : 'Aufklären';
 
-  const sel = $('maneuver-ship'); sel.innerHTML = '';
+  const box = $('maneuver-ships'); box.innerHTML = '';
   for (const s of state.own.ships) {
-    if (s.hits.length === 0 && !s.sunk) {
-      const o = document.createElement('option');
-      o.value = s.index; o.textContent = `${s.label} (${s.len})`;
-      sel.appendChild(o);
-    }
+    if (s.hits.length || s.sunk) continue;
+    const b = document.createElement('button');
+    b.textContent = `${s.label} (${s.len})`;
+    if (manShip === s.index) b.classList.add('sel');
+    b.onclick = () => { manShip = s.index; renderGame(); };
+    box.appendChild(b);
   }
   if (!clockTimer) clockTimer = setInterval(tickClock, 500);
 }
 
 function tickClock() {
-  if (!deadline) return;
-  const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
-  $('clock').textContent = `${left} s`;
+  if (!deadline || !state || state.status !== 'playing') return;
+  $('clock').textContent = `${Math.max(0, Math.round((deadline - Date.now()) / 1000))} s`;
+}
+
+function previewManeuver() {
+  const s = state.own.ships.find((x) => x.index === manShip);
+  if (!s) return;
+  const own = $('own-grid');
+  for (const i of s.cells) own.children[i].classList.add('manship');
+}
+
+function onOwnClick(i) {
+  if (mode !== 'maneuver') return;
+  const s = state.own.ships.find((x) => x.cells.includes(i) && !x.hits.length && !x.sunk);
+  if (s) { manShip = s.index; renderGame(); }
 }
 
 function onFoeHover(i) {
@@ -317,12 +381,13 @@ function onFoeClick(i) {
   if (!state || state.turn !== state.you) return;
   if (mode === 'scan') {
     const [r, c] = rc(i);
-    if (r < 1 || r > N - 2 || c < 1 || c > N - 2) { $('game-error').textContent = 'Scan-Mittelpunkt muss vollständig im Raster liegen.'; return; }
+    if (r < 1 || r > N - 2 || c < 1 || c > N - 2) { $('game-error').textContent = 'Der Scan-Mittelpunkt braucht rundum ein Feld Platz.'; return; }
     send({ t: 'scan', center: i });
     mode = 'normal';
     for (const el of $('foe-grid').children) el.classList.remove('scanzone');
     return;
   }
+  if (mode === 'maneuver') return;
   if (state.tracking[i] !== 0) return;
   if (selected.has(i)) selected.delete(i);
   else if (selected.size < state.shots) selected.add(i);
@@ -330,8 +395,7 @@ function onFoeClick(i) {
 }
 
 function renderEnd() {
-  const won = state.winner === state.you;
-  $('end-title').textContent = won ? 'Gewonnen.' : 'Verloren.';
+  $('end-title').textContent = state.winner === state.you ? 'Gewonnen.' : 'Verloren.';
   $('end-detail').textContent = `Partie nach ${state.turnCount} Zügen beendet.`;
   const paint = (elId, view) => {
     const el = $(elId);
@@ -357,35 +421,47 @@ $('btn-join').onclick = () => {
   send({ t: 'hello', name: nameValue() });
   send({ t: 'joinLobby', code, name: nameValue() });
 };
-$('btn-copy').onclick = () => navigator.clipboard.writeText($('join-url').value);
+$('btn-copy').onclick = () => navigator.clipboard?.writeText($('join-url').value);
 $('btn-to-placement').onclick = startPlacement;
 $('btn-random').onclick = () => send({ t: 'randomFleet' });
 $('btn-clear').onclick = () => { placeObjects = []; placeSel = 0; renderPlacement(); };
-$('btn-ready').onclick = () => {
-  send({
-    t: 'placeFleet',
-    placement: {
-      ships: placeObjects.filter((o) => o.kind === 'ship').map((o) => ({ type: o.type, r: o.r, c: o.c, horiz: o.horiz })),
-      decoys: placeObjects.filter((o) => o.kind === 'decoy').map((o) => ({ r: o.r, c: o.c, horiz: o.horiz }))
-    }
-  });
-};
-$('place-grid').addEventListener('contextmenu', (e) => { e.preventDefault(); placeHoriz = !placeHoriz; });
-document.addEventListener('keydown', (e) => { if (e.key === 'r' || e.key === 'R') placeHoriz = !placeHoriz; });
+$('btn-rotate').onclick = () => { placeHoriz = !placeHoriz; renderPlacement(); };
+$('btn-ready').onclick = () => send({
+  t: 'placeFleet',
+  placement: {
+    ships: placeObjects.filter((o) => o.kind === 'ship').map((o) => ({ type: o.type, r: o.r, c: o.c, horiz: o.horiz })),
+    decoys: placeObjects.filter((o) => o.kind === 'decoy').map((o) => ({ r: o.r, c: o.c, horiz: o.horiz }))
+  }
+});
+$('place-grid').addEventListener('contextmenu', (e) => { e.preventDefault(); placeHoriz = !placeHoriz; renderPlacement(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'r' || e.key === 'R') { placeHoriz = !placeHoriz; renderPlacement(); } });
 
 $('btn-fire').onclick = () => { send({ t: 'salvo', shots: [...selected] }); selected.clear(); };
 $('btn-scan').onclick = () => { mode = mode === 'scan' ? 'normal' : 'scan'; renderGame(); };
 $('btn-dive').onclick = () => send({ t: 'dive' });
-$('btn-maneuver').onclick = () => { $('maneuver-panel').classList.toggle('hidden'); };
-$('btn-maneuver-cancel').onclick = () => $('maneuver-panel').classList.add('hidden');
+$('btn-maneuver').onclick = () => {
+  mode = mode === 'maneuver' ? 'normal' : 'maneuver';
+  $('maneuver-panel').classList.toggle('hidden', mode !== 'maneuver');
+  if (mode === 'maneuver' && manShip === null) {
+    const first = state.own.ships.find((s) => !s.hits.length && !s.sunk);
+    if (first) manShip = first.index;
+  }
+  renderGame();
+};
+$('btn-maneuver-cancel').onclick = () => { mode = 'normal'; manShip = null; $('maneuver-panel').classList.add('hidden'); renderGame(); };
 for (const b of document.querySelectorAll('#maneuver-panel button[data-move]')) {
   b.onclick = () => {
-    send({ t: 'maneuver', shipIndex: Number($('maneuver-ship').value), move: b.dataset.move });
+    if (manShip === null) { $('game-error').textContent = 'Erst ein Schiff wählen.'; return; }
+    send({ t: 'maneuver', shipIndex: manShip, move: b.dataset.move });
+    mode = 'normal'; manShip = null;
     $('maneuver-panel').classList.add('hidden');
     selected.clear();
   };
 }
-$('btn-again').onclick = () => location.reload();
+
+$('btn-rematch').onclick = () => { $('rematch-hint').textContent = 'Revanche angefragt…'; send({ t: 'rematch' }); };
+$('btn-lobby').onclick = () => { show.pendingPlacement = false; show('screen-lobby'); };
+$('btn-quit').onclick = () => { localStorage.removeItem('nebel.token'); localStorage.removeItem('nebel.code'); location.href = location.origin; };
 
 myToken = localStorage.getItem('nebel.token');
 myCode = localStorage.getItem('nebel.code');

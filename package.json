@@ -1,6 +1,6 @@
 {
   "name": "nebel",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": false,
   "type": "module",
   "description": "NEBEL – Seeschlacht-Redesign mit Salve, Ködern, Manöver, Aufklärung und Tauchen",
@@ -12,7 +12,8 @@
     "test": "node --test test/*.test.js",
     "sim": "node tools/sim.mjs 500",
     "e2e": "node test/e2e.mjs",
-    "e2e:lobby": "node test/e2e-lobby.mjs"
+    "e2e:lobby": "node test/e2e-lobby.mjs",
+    "e2e:options": "node test/e2e-options.mjs"
   },
   "dependencies": {
     "express": "^4.19.2",

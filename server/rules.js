@@ -23,6 +23,38 @@ export const HIT = 2;
 export const MIN_SALVO = 2;
 export const MAX_SALVO = 4;
 
+/** Testbare Stellschrauben. Werden vor Partiebeginn in der Lobby gesetzt. */
+export const DEFAULT_OPTIONS = {
+  minSalvo: 2,
+  maxSalvo: 4,
+  openingBalance: true,     // Startspieler hat im ersten Zug nur 1 Schuss
+  singleShotAfterHit: false,// nach einem Treffer im letzten Zug nur 1 Schuss
+  decoyCount: 2,
+  decoyLen: 2,
+  scanEnabled: true,
+  diveEnabled: true,
+  maneuverEnabled: true,
+  turnSeconds: 60
+};
+
+export function mergeOptions(raw = {}) {
+  const o = { ...DEFAULT_OPTIONS };
+  const num = (v, lo, hi, def) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(lo, Math.min(hi, Math.round(n))) : def;
+  };
+  o.minSalvo = num(raw.minSalvo, 1, 6, o.minSalvo);
+  o.maxSalvo = num(raw.maxSalvo, 1, 8, o.maxSalvo);
+  if (o.maxSalvo < o.minSalvo) o.maxSalvo = o.minSalvo;
+  o.decoyCount = num(raw.decoyCount, 0, 4, o.decoyCount);
+  o.decoyLen = num(raw.decoyLen, 1, 3, o.decoyLen);
+  o.turnSeconds = num(raw.turnSeconds, 15, 300, o.turnSeconds);
+  for (const k of ['openingBalance', 'singleShotAfterHit', 'scanEnabled', 'diveEnabled', 'maneuverEnabled']) {
+    if (raw[k] !== undefined) o[k] = !!raw[k];
+  }
+  return o;
+}
+
 // ---------------------------------------------------------------- Geometrie
 export const ix = (r, c) => r * N + c;
 export const rc = (i) => [Math.floor(i / N), i % N];
@@ -63,15 +95,15 @@ export function orth(i) {
 
 // ------------------------------------------------------------- Aufstellung
 // placement = { ships: [{type,r,c,horiz}], decoys: [{r,c,horiz}] }
-export function validatePlacement(placement) {
+export function validatePlacement(placement, opts = DEFAULT_OPTIONS) {
   if (!placement || !Array.isArray(placement.ships) || !Array.isArray(placement.decoys)) {
     return { ok: false, error: 'Aufstellung unvollständig.' };
   }
   if (placement.ships.length !== FLEET_SPEC.length) {
     return { ok: false, error: `Es müssen genau ${FLEET_SPEC.length} Schiffe gesetzt sein.` };
   }
-  if (placement.decoys.length !== DECOY_COUNT) {
-    return { ok: false, error: `Es müssen genau ${DECOY_COUNT} Köder gesetzt sein.` };
+  if (placement.decoys.length !== opts.decoyCount) {
+    return { ok: false, error: `Es müssen genau ${opts.decoyCount} Köder gesetzt sein.` };
   }
 
   const wanted = FLEET_SPEC.map((s) => s.type).sort();
@@ -88,9 +120,9 @@ export function validatePlacement(placement) {
     objects.push({ kind: 'ship', type: spec.type, label: spec.label, len: spec.len, horiz: !!s.horiz, cells });
   }
   for (const d of placement.decoys) {
-    const cells = lineCells(d.r, d.c, DECOY_LEN, !!d.horiz);
+    const cells = lineCells(d.r, d.c, opts.decoyLen, !!d.horiz);
     if (!cells) return { ok: false, error: 'Köder liegt außerhalb des Rasters.' };
-    objects.push({ kind: 'decoy', len: DECOY_LEN, horiz: !!d.horiz, cells });
+    objects.push({ kind: 'decoy', len: opts.decoyLen, horiz: !!d.horiz, cells });
   }
 
   const occupied = new Set();
@@ -107,7 +139,7 @@ export function validatePlacement(placement) {
 }
 
 export function makePlayer(name, placement, opts = {}) {
-  const v = validatePlacement(placement);
+  const v = validatePlacement(placement, opts.options || DEFAULT_OPTIONS);
   if (!v.ok) throw new Error(v.error);
   return {
     name,
@@ -122,11 +154,13 @@ export function makePlayer(name, placement, opts = {}) {
     diving: false,
     divedLastTurn: false,
     divedThisTurn: false,
-    scannedThisTurn: false
+    scannedThisTurn: false,
+    lastSalvoHit: false,     // fuer die Option "nach Treffer nur Einzelschuss"
+    scans: []                // {center, count} – fuer die Markierung im Client
   };
 }
 
-export function randomPlacement(rand = Math.random) {
+export function randomPlacement(rand = Math.random, opts = DEFAULT_OPTIONS) {
   const rnd = (n) => Math.floor(rand() * n);
   for (let attempt = 0; attempt < 500; attempt++) {
     const blocked = new Set();
@@ -153,8 +187,8 @@ export function randomPlacement(rand = Math.random) {
       ships.push({ type: spec.type, ...p });
     }
     if (!ok) continue;
-    for (let d = 0; d < DECOY_COUNT; d++) {
-      const p = put(DECOY_LEN);
+    for (let d = 0; d < opts.decoyCount; d++) {
+      const p = put(opts.decoyLen);
       if (!p) { ok = false; break; }
       decoys.push(p);
     }
@@ -168,6 +202,7 @@ export function createGame(playerA, playerB, opts = {}) {
   const starter = opts.starter ?? 0;
   return {
     status: 'playing',
+    options: opts.options || DEFAULT_OPTIONS,
     players: [playerA, playerB],
     starter,
     turn: starter,
@@ -184,8 +219,11 @@ export const allSunk = (p) => p.ships.every((s) => s.hits.length >= s.len);
 
 /** Salvengröße vor Abzügen. */
 export function baseSalvo(game, slot) {
-  if (game.turnCount === 0 && slot === game.starter) return 1; // Eröffnungsausgleich
-  return Math.max(MIN_SALVO, Math.min(MAX_SALVO, aliveShips(game.players[slot]).length));
+  const o = game.options || DEFAULT_OPTIONS;
+  const p = game.players[slot];
+  if (o.openingBalance && game.turnCount === 0 && slot === game.starter) return 1;
+  if (o.singleShotAfterHit && p.lastSalvoHit) return 1;   // Jagd nur mit Einzelschuss
+  return Math.max(o.minSalvo, Math.min(o.maxSalvo, aliveShips(p).length));
 }
 
 /** Tatsächlich verfügbare Schüsse in diesem Zug (nach Tauchen/Scan). */
@@ -225,6 +263,7 @@ function endTurn(game) {
 // ------------------------------------------------------------------ Aktionen
 export function applyDive(game, slot) {
   if (game.status !== 'playing') return { ok: false, error: 'Partie läuft nicht.' };
+  if (!(game.options || DEFAULT_OPTIONS).diveEnabled) return { ok: false, error: 'Tauchen ist in dieser Partie deaktiviert.' };
   if (game.turn !== slot) return { ok: false, error: 'Nicht am Zug.' };
   const p = game.players[slot];
   if (p.divedThisTurn) return { ok: false, error: 'Bereits getaucht.' };
@@ -238,6 +277,7 @@ export function applyDive(game, slot) {
 
 export function applyManeuver(game, slot, shipIndex, move) {
   if (game.status !== 'playing') return { ok: false, error: 'Partie läuft nicht.' };
+  if (!(game.options || DEFAULT_OPTIONS).maneuverEnabled) return { ok: false, error: 'Manöver sind in dieser Partie deaktiviert.' };
   if (game.turn !== slot) return { ok: false, error: 'Nicht am Zug.' };
   const p = game.players[slot];
   const ship = p.ships[shipIndex];
@@ -268,6 +308,8 @@ export function applyManeuver(game, slot, shipIndex, move) {
 
   ship.cells = cells;
   ship.horiz = horiz;
+  ship.movedTurn = game.turnCount;
+  p.lastSalvoHit = false;
   game.log.push({ turn: game.turnCount, slot, kind: 'maneuver' });
   endTurn(game);
   return { ok: true, notice: 'maneuvered' };
@@ -275,6 +317,7 @@ export function applyManeuver(game, slot, shipIndex, move) {
 
 export function applyScan(game, slot, center) {
   if (game.turn !== slot) return { ok: false, error: 'Nicht am Zug.' };
+  if (!(game.options || DEFAULT_OPTIONS).scanEnabled) return { ok: false, error: 'Aufklärung ist in dieser Partie deaktiviert.' };
   const p = game.players[slot];
   if (p.scannedThisTurn) return { ok: false, error: 'Bereits aufgeklärt.' };
   if (!shipAlive(p, 'traeger')) return { ok: false, error: 'Träger versenkt – keine Aufklärung.' };
@@ -293,6 +336,7 @@ export function applyScan(game, slot, center) {
     for (let dc = -1; dc <= 1; dc++) if (occ.has(ix(r + dr, c + dc))) count++;
   }
   p.scannedThisTurn = true;
+  p.scans.push({ center, count, turn: game.turnCount });
   return { ok: true, count };
 }
 
@@ -369,6 +413,7 @@ export function applySalvo(game, slot, shots) {
     for (const i of waterCells) p.tracking[i] = UNKNOWN;
   }
 
+  p.lastSalvoHit = results.some((x) => x.result === 'hit' || x.result === 'sunk');
   game.log.push({ turn: game.turnCount, slot, kind: 'salvo', results });
 
   if (allSunk(foe)) {

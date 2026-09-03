@@ -1,7 +1,7 @@
 // NEBEL – Lobby- und Partieverwaltung (autoritativ, in-memory)
 
 import {
-  makePlayer, createGame, randomPlacement, validatePlacement,
+  makePlayer, createGame, randomPlacement, validatePlacement, mergeOptions, DEFAULT_OPTIONS,
   applySalvo, applyManeuver, applyDive, applyScan, passTurn, beginTurn,
   requiredShots, shotsAvailable, baseSalvo, ownView, aliveShips, shipAlive
 } from './rules.js';
@@ -11,8 +11,7 @@ import {
 } from './bot.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // ohne I,O,0,1
-const TURN_MS = 60_000;
-const BANK_MS = 300_000;
+const BANK_MS = 0;   // Zeitbank standardmaessig aus: Timeout gibt den Zug ab
 const PLACEMENT_MS = 180_000;
 const ROOM_TTL_MS = 45 * 60_000;
 
@@ -49,6 +48,8 @@ export function createRoom(vsBot = false) {
     timeoutStreak: [0, 0],
     bank: [BANK_MS, BANK_MS],
     deadline: 0,
+    options: { ...DEFAULT_OPTIONS },
+    rematchVotes: new Set(),
     vsBot
   };
   rooms.set(code, room);
@@ -81,12 +82,25 @@ export function joinRoom(room, name, ws) {
   room.slots[free] = slot;
   if (room.vsBot && free === 0) {
     const bot = makeSlot('Nebel-Bot', null, true);
-    bot.placement = botPlacement();
+    bot.placement = botPlacement(Math.random, room.options);
     bot.ready = true;
     room.slots[1] = bot;
     room.brain = createBotBrain();
   }
   return { ok: true, index: free, slot };
+}
+
+export function setOptions(room, slotIndex, raw) {
+  if (room.status === 'playing') return { ok: false, error: 'Partie läuft bereits.' };
+  if (slotIndex !== 0) return { ok: false, error: 'Nur der Host stellt die Regeln ein.' };
+  room.options = mergeOptions(raw);
+  // Aufstellungen verwerfen, wenn sich die Köderzahl geändert hat
+  for (const s of room.slots) {
+    if (!s) continue;
+    if (s.isBot) { s.placement = botPlacement(Math.random, room.options); s.ready = true; }
+    else { s.placement = null; s.ready = false; }
+  }
+  return { ok: true, options: room.options };
 }
 
 export function rebind(room, playerToken, ws) {
@@ -111,6 +125,7 @@ export function lobbyState(room) {
     t: 'lobby',
     code: room.code,
     status: room.status,
+    options: room.options,
     players: room.slots.map((s) => (s ? { name: s.name, ready: s.ready, bot: s.isBot, connected: s.connected } : null))
   };
 }
@@ -137,6 +152,8 @@ export function pushState(room) {
       bank: room.bank[i],
       own: ownView(me),
       tracking: me.tracking,
+      scans: me.scans,
+      options: g.options,
       sunkEnemy: me.sunkEnemy,
       shots: g.turn === i ? requiredShots(g, i) : 0,
       baseSalvo: baseSalvo(g, i),
@@ -163,22 +180,15 @@ function clearTimer(room) {
 function armTurnTimer(room) {
   clearTimer(room);
   if (!room.game || room.game.status !== 'playing') return;
-  room.deadline = now() + TURN_MS;
-  room.timer = setTimeout(() => onTimeout(room), TURN_MS + 200);
+  const ms = (room.options.turnSeconds || 60) * 1000;
+  room.deadline = now() + ms;
+  room.timer = setTimeout(() => onTimeout(room), ms + 200);
 }
 
 function onTimeout(room) {
   const g = room.game;
   if (!g || g.status !== 'playing') return;
   const slot = g.turn;
-  const extra = Math.min(room.bank[slot], 30_000);
-  if (extra > 0) {
-    room.bank[slot] -= extra;
-    room.deadline = now() + extra;
-    room.timer = setTimeout(() => onTimeout(room), extra + 200);
-    pushState(room);
-    return;
-  }
   room.timeoutStreak[slot] += 1;
   passTurn(g, slot);
   broadcast(room, { t: 'notice', kind: 'timeout', slot });
@@ -197,7 +207,7 @@ export function setPlacement(room, slotIndex, placement) {
   const slot = room.slots[slotIndex];
   if (!slot) return { ok: false, error: 'Unbekannter Platz.' };
   if (room.status === 'playing') return { ok: false, error: 'Partie läuft bereits.' };
-  const v = validatePlacement(placement);
+  const v = validatePlacement(placement, room.options);
   if (!v.ok) return v;
   slot.placement = placement;
   slot.ready = true;
@@ -209,10 +219,10 @@ export function tryStart(room) {
   if (!room.slots[0] || !room.slots[1]) return;
   if (!room.slots.every((s) => s.ready && s.placement)) return;
 
-  const pa = makePlayer(room.slots[0].name, room.slots[0].placement, { isBot: room.slots[0].isBot });
-  const pb = makePlayer(room.slots[1].name, room.slots[1].placement, { isBot: room.slots[1].isBot });
+  const pa = makePlayer(room.slots[0].name, room.slots[0].placement, { isBot: room.slots[0].isBot, options: room.options });
+  const pb = makePlayer(room.slots[1].name, room.slots[1].placement, { isBot: room.slots[1].isBot, options: room.options });
   const starter = Math.random() < 0.5 ? 0 : 1;
-  room.game = createGame(pa, pb, { starter });
+  room.game = createGame(pa, pb, { starter, options: room.options });
   beginTurn(room.game);
   room.status = 'playing';
   room.bank = [BANK_MS, BANK_MS];
@@ -311,8 +321,34 @@ function maybeBotTurn(room) {
   }, thinkDelay(room.brain));
 }
 
-export function randomPlacementForClient() {
-  return randomPlacement();
+export function randomPlacementForClient(room) {
+  return randomPlacement(Math.random, room ? room.options : undefined);
+}
+
+/** Revanche: gleiche Lobby, gleiche Gegner, neue Aufstellung. */
+export function voteRematch(room, slotIndex) {
+  if (room.status !== 'finished') return { ok: false, error: 'Partie läuft noch.' };
+  room.rematchVotes.add(slotIndex);
+  const humans = room.slots.filter((s) => s && !s.isBot).length;
+  if (room.rematchVotes.size < humans) {
+    broadcast(room, { t: 'notice', kind: 'rematchWanted', by: room.slots[slotIndex].name });
+    return { ok: true, waiting: true };
+  }
+  clearTimer(room);
+  room.rematchVotes.clear();
+  room.game = null;
+  room.status = 'lobby';
+  room.timeoutStreak = [0, 0];
+  room.bank = [BANK_MS, BANK_MS];
+  for (const s of room.slots) {
+    if (!s) continue;
+    if (s.isBot) { s.placement = botPlacement(Math.random, room.options); s.ready = true; }
+    else { s.placement = null; s.ready = false; }
+  }
+  if (room.brain) room.brain = createBotBrain();
+  broadcast(room, { t: 'rematch' });
+  pushLobby(room);
+  return { ok: true, waiting: false };
 }
 
 export function roomCount() { return rooms.size; }

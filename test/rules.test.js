@@ -187,3 +187,77 @@ test('Ausweichen: Treffer der Salve bleiben bestehen', () => {
   assert.equal(res.evaded, true);
   assert.equal(g.players[0].tracking[ix(0, 0)], 2); // Treffer auf Träger bleibt
 });
+
+// ---------------------------------------------------------------- Optionen
+import { mergeOptions, DEFAULT_OPTIONS } from '../server/rules.js';
+
+const mkOpt = (o) => {
+  const options = mergeOptions(o);
+  const a = makePlayer('A', FIXED, { options });
+  const b = makePlayer('B', FIXED, { options });
+  const g = createGame(a, b, { starter: 0, options });
+  beginTurn(g);
+  return g;
+};
+
+test('Optionen: Grenzen werden erzwungen und max < min korrigiert', () => {
+  const o = mergeOptions({ minSalvo: 99, maxSalvo: 1, turnSeconds: 2, decoyCount: 9 });
+  assert.equal(o.minSalvo, 6);
+  assert.equal(o.maxSalvo, 6);      // auf min hochgezogen
+  assert.equal(o.turnSeconds, 15);
+  assert.equal(o.decoyCount, 4);
+});
+
+test('Option: Eröffnungsausgleich abschaltbar', () => {
+  const g = mkOpt({ openingBalance: false });
+  assert.equal(baseSalvo(g, 0), 4);
+});
+
+test('Option: Salvengrenzen wirken', () => {
+  const g = mkOpt({ minSalvo: 1, maxSalvo: 2, openingBalance: false });
+  assert.equal(baseSalvo(g, 0), 2);
+});
+
+test('Option: nach einem Treffer nur Einzelschuss', () => {
+  const g = mkOpt({ singleShotAfterHit: true, openingBalance: false });
+  applySalvo(g, 0, [ix(0, 0), ix(9, 9), ix(9, 8), ix(9, 7)]);  // Treffer auf Träger
+  applySalvo(g, 1, [ix(5, 5), ix(5, 6), ix(5, 7), ix(5, 8)]);  // nur Wasser
+  assert.equal(baseSalvo(g, 0), 1, 'nach Treffer nur 1 Schuss');
+  assert.equal(baseSalvo(g, 1), 4, 'ohne Treffer volle Salve');
+  applySalvo(g, 0, [ix(8, 8)]);                                // Wasser
+  applySalvo(g, 1, [ix(4, 4), ix(4, 5), ix(4, 6), ix(4, 7)]);
+  assert.equal(baseSalvo(g, 0), 4, 'nach Fehlschuss wieder volle Salve');
+});
+
+test('Option: Manöver, Tauchen und Aufklärung abschaltbar', () => {
+  const g = mkOpt({ maneuverEnabled: false, diveEnabled: false, scanEnabled: false, openingBalance: false });
+  assert.equal(applyManeuver(g, 0, 0, 'down').ok, false);
+  assert.equal(applyDive(g, 0).ok, false);
+  assert.equal(applyScan(g, 0, ix(5, 5)).ok, false);
+});
+
+test('Option: Köderzahl 0 wird akzeptiert', () => {
+  const options = mergeOptions({ decoyCount: 0 });
+  const p = randomPlacement(Math.random, options);
+  assert.equal(p.decoys.length, 0);
+  assert.equal(validatePlacement(p, options).ok, true);
+  assert.equal(validatePlacement(p, DEFAULT_OPTIONS).ok, false); // Default verlangt 2
+});
+
+test('Option: drei Köder à 3 Feldern sind aufstellbar', () => {
+  const options = mergeOptions({ decoyCount: 3, decoyLen: 3 });
+  for (let i = 0; i < 50; i++) {
+    const p = randomPlacement(Math.random, options);
+    assert.equal(p.decoys.length, 3);
+    assert.equal(validatePlacement(p, options).ok, true);
+  }
+});
+
+test('Scan-Historie wird für die Markierung im Client gespeichert', () => {
+  const g = mkOpt({ openingBalance: false });
+  applySalvo(g, 0, [ix(9, 9), ix(9, 8), ix(9, 7), ix(9, 6)]);
+  const r = applyScan(g, 1, ix(1, 1));
+  assert.equal(r.ok, true);
+  assert.equal(g.players[1].scans.length, 1);
+  assert.equal(g.players[1].scans[0].count, r.count);
+});

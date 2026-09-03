@@ -2,7 +2,8 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1b26">
 <title>NEBEL – Seeschlacht mit Ködern</title>
 <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -10,7 +11,6 @@
 
 <header>
   <h1>NEBEL</h1>
-  <span class="sub">Seeschlacht · Salve, Köder, Manöver</span>
   <span id="conn" class="conn">verbinde…</span>
 </header>
 
@@ -21,27 +21,27 @@
   <div class="card">
     <label for="name">Dein Name</label>
     <input id="name" maxlength="16" placeholder="Kapitän" autocomplete="off">
-    <div class="row">
+    <div class="row stack">
       <button id="btn-create" class="primary">Lobby erstellen</button>
       <button id="btn-bot">Gegen Bot spielen</button>
     </div>
     <div class="row">
-      <input id="code" maxlength="4" placeholder="CODE" class="code-input" autocomplete="off">
-      <button id="btn-join">Lobby beitreten</button>
+      <input id="code" maxlength="4" placeholder="CODE" class="code-input" autocomplete="off" inputmode="latin">
+      <button id="btn-join">Beitreten</button>
     </div>
-    <p class="hint">Server schläft nach 15 Minuten ohne Nutzung ein. Der erste Aufruf kann dann bis zu einer Minute dauern.</p>
+    <p class="hint">Der Server schläft nach 15 Minuten ohne Nutzung ein. Der erste Aufruf dauert dann bis zu einer Minute.</p>
   </div>
 
   <details class="card rules">
     <summary>Regeln in 90 Sekunden</summary>
     <ul>
-      <li><b>Flotte:</b> Träger 5 · Schlachtschiff 4 · Kreuzer 3 · U-Boot 3 · Zerstörer 2. Dazu <b>2 Köder à 2 Feldern</b>. Nichts darf sich berühren, auch nicht diagonal.</li>
-      <li><b>Salve:</b> So viele Schüsse wie du Schiffe hast – mindestens 2, höchstens 4. Der Startspieler hat im ersten Zug nur 1 Schuss.</li>
-      <li><b>Köder</b> melden „Treffer“, werden aber nie versenkt. Du erkennst sie erst, wenn der Trefferblock rundum von Wasser umschlossen ist.</li>
+      <li><b>Flotte:</b> Träger 5 · Schlachtschiff 4 · Kreuzer 3 · U-Boot 3 · Zerstörer 2, dazu <b>2 Köder à 2 Feldern</b>. Nichts berührt sich, auch nicht diagonal.</li>
+      <li><b>Salve:</b> So viele Schüsse wie du Schiffe hast – min 2, max 4. Der Startspieler hat im ersten Zug nur 1 Schuss.</li>
+      <li><b>Köder</b> melden „Treffer“, werden aber nie versenkt – und sind zwei Felder lang wie der Zerstörer.</li>
       <li><b>Manöver:</b> Statt zu feuern ein <i>unbeschädigtes</i> Schiff um 1 Feld versetzen oder drehen. Der Gegner hört nur „Flotte manövriert“.</li>
-      <li><b>Aufklärung</b> (Träger lebt): Ein Schuss der Salve wird zum 3×3-Scan – Antwort ist nur die <i>Anzahl</i> belegter Felder. Köder zählen nicht.</li>
-      <li><b>Tauchen</b> (U-Boot unbeschädigt): kostet einen Schuss. Treffer auf das U-Boot melden „Wasser“, der Gegner erfährt danach nur „U-Boot ausgewichen“.</li>
-      <li><b>Das Orakel lügt nie.</b> Jede Täuschung entsteht daraus, dass wahre Meldungen falsch gelesen werden.</li>
+      <li><b>Aufklärung</b> (Träger lebt): ein Schuss der Salve wird zum 3×3-Scan – Antwort ist nur die <i>Anzahl</i>. Köder zählen nicht.</li>
+      <li><b>Tauchen</b> (U-Boot unbeschädigt): kostet einen Schuss. Treffer melden „Wasser“; danach werden alle Wasser-Meldungen dieser Salve zurückgesetzt.</li>
+      <li><b>Das Orakel lügt nie.</b> Getäuscht wird über wahre Meldungen.</li>
     </ul>
   </details>
 </section>
@@ -52,28 +52,46 @@
     <h2>Lobby <span id="lobby-code" class="code"></span></h2>
     <div class="row">
       <input id="join-url" readonly>
-      <button id="btn-copy">Link kopieren</button>
+      <button id="btn-copy">Link</button>
     </div>
     <ul id="lobby-players" class="players"></ul>
-    <p class="hint">Beide Spieler stellen ihre Flotte auf. Sobald beide bereit sind, startet die Partie automatisch.</p>
-    <button id="btn-to-placement" class="primary">Flotte aufstellen</button>
+    <button id="btn-to-placement" class="primary wide-btn">Flotte aufstellen</button>
   </div>
+
+  <details class="card" id="opt-card" open>
+    <summary>Testeinstellungen <span class="hint" id="opt-owner"></span></summary>
+    <div class="opts">
+      <label>Salve min <input type="number" id="o-min" min="1" max="6" value="2"></label>
+      <label>Salve max <input type="number" id="o-max" min="1" max="8" value="4"></label>
+      <label>Köder-Anzahl <input type="number" id="o-decoys" min="0" max="4" value="2"></label>
+      <label>Köder-Länge <input type="number" id="o-decoylen" min="1" max="3" value="2"></label>
+      <label>Zugzeit (s) <input type="number" id="o-time" min="15" max="300" value="60"></label>
+      <label class="chk"><input type="checkbox" id="o-opening" checked> Eröffnungsausgleich (1 Schuss im ersten Zug)</label>
+      <label class="chk"><input type="checkbox" id="o-single"> Nach einem Treffer nur Einzelschuss (Jagdmodus)</label>
+      <label class="chk"><input type="checkbox" id="o-scan" checked> Aufklärung erlauben</label>
+      <label class="chk"><input type="checkbox" id="o-dive" checked> Tauchen erlauben</label>
+      <label class="chk"><input type="checkbox" id="o-man" checked> Manöver erlauben</label>
+    </div>
+    <button id="btn-opts" class="wide-btn">Einstellungen übernehmen</button>
+    <p class="hint">Änderungen setzen die Aufstellungen zurück. Nur der Host kann einstellen.</p>
+  </details>
 </section>
 
 <!-- ------------------------------------------------- Aufstellung -->
 <section id="screen-placement" class="screen">
-  <div class="card wide">
+  <div class="card">
     <h2>Aufstellung</h2>
     <div class="place-wrap">
       <div id="place-grid" class="grid own"></div>
       <div class="place-side">
         <ul id="ship-list" class="ship-list"></ul>
-        <p class="hint" id="place-hint">Schiff wählen, dann Feld anklicken. <b>R</b> oder Rechtsklick dreht.</p>
         <div class="row">
+          <button id="btn-rotate">Drehen (R)</button>
           <button id="btn-random">Zufällig</button>
           <button id="btn-clear">Leeren</button>
         </div>
-        <button id="btn-ready" class="primary" disabled>Bereit</button>
+        <p class="hint" id="place-hint">Objekt wählen, dann Feld antippen. Ausrichtung: <b id="orient">waagerecht</b>.</p>
+        <button id="btn-ready" class="primary wide-btn" disabled>Bereit</button>
         <p id="place-error" class="error"></p>
       </div>
     </div>
@@ -82,23 +100,17 @@
 
 <!-- ------------------------------------------------------ Partie -->
 <section id="screen-game" class="screen">
-  <div class="boards">
-    <div class="board-col">
-      <h3>Gegner: <span id="foe-name">—</span> <span id="foe-ships" class="pill"></span></h3>
-      <div id="foe-grid" class="grid foe"></div>
-    </div>
-    <div class="board-col">
-      <h3>Deine Flotte</h3>
-      <div id="own-grid" class="grid own small"></div>
-    </div>
+  <div class="board-col">
+    <h3>Gegner: <span id="foe-name">—</span> <span id="foe-ships" class="pill"></span></h3>
+    <div id="foe-grid" class="grid foe"></div>
   </div>
 
-  <div class="controls card">
+  <div class="controls card sticky">
     <div id="turn-banner" class="banner">…</div>
     <div class="row">
-      <span class="pill">Salve: <b id="shots-left">–</b></span>
-      <span class="pill">Zeit: <b id="clock">–</b></span>
-      <span class="pill">Zeitbank: <b id="bank">–</b></span>
+      <span class="pill">Salve <b id="shots-left">–</b></span>
+      <span class="pill">Zeit <b id="clock">–</b></span>
+      <span class="pill" id="mode-pill"></span>
     </div>
     <div class="row">
       <button id="btn-fire" class="primary" disabled>Feuern</button>
@@ -106,19 +118,27 @@
       <button id="btn-dive" disabled>Tauchen</button>
       <button id="btn-maneuver" disabled>Manöver</button>
     </div>
-    <div id="maneuver-panel" class="row hidden">
-      <select id="maneuver-ship"></select>
-      <button data-move="up">↑</button>
-      <button data-move="down">↓</button>
-      <button data-move="left">←</button>
-      <button data-move="right">→</button>
-      <button data-move="rotate">drehen</button>
+    <div id="maneuver-panel" class="man-panel hidden">
+      <p class="hint">Schiff antippen – es wird unten markiert – dann Richtung wählen.</p>
+      <div id="maneuver-ships" class="row"></div>
+      <div class="row">
+        <button data-move="up">↑ hoch</button>
+        <button data-move="down">↓ runter</button>
+        <button data-move="left">← links</button>
+        <button data-move="right">→ rechts</button>
+        <button data-move="rotate">⟳ drehen</button>
+      </div>
       <button id="btn-maneuver-cancel">Abbrechen</button>
     </div>
     <p id="game-error" class="error"></p>
   </div>
 
-  <div class="card log-card">
+  <div class="board-col">
+    <h3>Deine Flotte</h3>
+    <div id="own-grid" class="grid own"></div>
+  </div>
+
+  <div class="card">
     <h3>Funkverkehr</h3>
     <ul id="log" class="log"></ul>
   </div>
@@ -129,11 +149,16 @@
   <div class="card">
     <h2 id="end-title">—</h2>
     <p id="end-detail" class="hint"></p>
-    <div class="boards">
-      <div class="board-col"><h3>Gegnerische Flotte</h3><div id="reveal-foe" class="grid own small"></div></div>
-      <div class="board-col"><h3>Deine Flotte</h3><div id="reveal-own" class="grid own small"></div></div>
+    <div class="row stack">
+      <button id="btn-rematch" class="primary">Revanche</button>
+      <button id="btn-lobby">Zurück zur Lobby</button>
+      <button id="btn-quit">Beenden</button>
     </div>
-    <button id="btn-again" class="primary">Neue Partie</button>
+    <p id="rematch-hint" class="hint"></p>
+    <div class="reveal-wrap">
+      <div class="board-col"><h3>Gegnerische Flotte</h3><div id="reveal-foe" class="grid own"></div></div>
+      <div class="board-col"><h3>Deine Flotte</h3><div id="reveal-own" class="grid own"></div></div>
+    </div>
   </div>
 </section>
 

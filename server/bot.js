@@ -4,7 +4,7 @@
 
 import {
   N, CELLS, FLEET_SPEC, UNKNOWN, WATER, HIT,
-  ix, rc, orth, lineCells, randomPlacement,
+  ix, rc, orth, lineCells, randomPlacement, DEFAULT_OPTIONS,
   aliveShips, shipAlive, sub, baseSalvo, requiredShots, shotsAvailable
 } from './rules.js';
 
@@ -19,8 +19,8 @@ export function createBotBrain(rand = Math.random) {
   };
 }
 
-export function botPlacement(rand = Math.random) {
-  return randomPlacement(rand);
+export function botPlacement(rand = Math.random, options) {
+  return randomPlacement(rand, options);
 }
 
 // ------------------------------------------------------------- Buchhaltung
