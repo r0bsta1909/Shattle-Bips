@@ -502,3 +502,74 @@ test('Ohne Vorrat bleibt es bei "genau N"', async () => {
   byId.get('foe-grid').children[12].onclick();
   assert.equal(byId.get('btn-fire').disabled, true, 'ein Schuss von vier genuegt nicht');
 });
+
+// ------------------------------------------------------ Ereignis-Einblendung
+test('Versenktes Schiff blendet eine Meldung ein', async () => {
+  const { byId, feed } = await bootClient();
+  feed(stateMsg());
+
+  feed({ t: 'salvoResult', results: [
+    { cell: 12, result: 'water' },
+    { cell: 13, result: 'sunk', shipType: 'kreuzer', shipLabel: 'Kreuzer', shipCells: [13] }
+  ] });
+
+  const el = byId.get('flash');
+  assert.ok(el._classes.has('show'), 'Einblendung ist sichtbar');
+  assert.ok(el._classes.has('sunk'), 'als Versenkung eingefaerbt');
+  assert.match(el.innerHTML, /Kreuzer versenkt/);
+});
+
+test('Nur das Wichtigste einer Salve, nicht vier Meldungen', async () => {
+  const { byId, feed } = await bootClient();
+  feed(stateMsg());
+  feed({ t: 'salvoResult', results: [
+    { cell: 1, result: 'hit' }, { cell: 2, result: 'hit' },
+    { cell: 3, result: 'sunk', shipType: 'uboot', shipLabel: 'U-Boot', shipCells: [3] }
+  ] });
+  // Die Versenkung schlaegt die Treffer - sonst haette der Spieler drei
+  // Einblendungen nacheinander und wuesste am Ende weniger.
+  assert.match(byId.get('flash').innerHTML, /U-Boot versenkt/);
+
+  feed({ t: 'salvoResult', results: [{ cell: 4, result: 'hit' }, { cell: 5, result: 'hit' }] });
+  assert.match(byId.get('flash').innerHTML, /2 Treffer/);
+});
+
+test('Reines Wasser blendet nichts ein', async () => {
+  const { byId, feed } = await bootClient();
+  feed(stateMsg());
+  byId.get('flash').classList.remove('show');
+  feed({ t: 'salvoResult', results: [{ cell: 1, result: 'water' }, { cell: 2, result: 'water' }] });
+  assert.equal(byId.get('flash')._classes.has('show'), false, 'kein Laerm ohne Ereignis');
+});
+
+test('Eigener Schiffsverlust wird aus dem Zustand erkannt', async () => {
+  const { byId, feed } = await bootClient();
+  feed(stateMsg());
+
+  // Der Gegner bekommt die Salve gemeldet, ich nur "Beschuss auf ...".
+  // Der Verlust muss deshalb aus dem Zustandswechsel kommen.
+  const m = stateMsg({ turnCount: 4 });
+  m.own.ships[2].sunk = true;
+  feed(m);
+
+  const el = byId.get('flash');
+  assert.ok(el._classes.has('show'));
+  assert.ok(el._classes.has('bad'));
+  assert.match(el.innerHTML, /Kreuzer verloren/);
+  assert.match(el.innerHTML, /Michi/, 'mit Urheber');
+});
+
+test('Aufklärung und Ausweichen blenden ein', async () => {
+  const { byId, feed } = await bootClient();
+  feed(stateMsg());
+
+  feed({ t: 'scanResult', center: 55, count: 3 });
+  assert.match(byId.get('flash').innerHTML, /3 Felder belegt/);
+
+  feed({ t: 'scanResult', center: 55, count: 0 });
+  assert.match(byId.get('flash').innerHTML, /Nichts geortet/);
+
+  feed({ t: 'notice', kind: 'evaded' });
+  assert.match(byId.get('flash').innerHTML, /ausgewichen/);
+  assert.ok(byId.get('flash')._classes.has('bad'));
+});

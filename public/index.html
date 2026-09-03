@@ -115,6 +115,10 @@
     <button class="tab" data-pane="pane-log" role="tab">Funk</button>
   </div>
 
+  <!-- Kurze Einblendung fuer Ereignisse. Liegt ueber dem Brett, faengt aber
+       keine Tipps ab (pointer-events:none in der CSS). -->
+  <div id="flash" class="flash" aria-live="polite"></div>
+
   <div class="game-pane active" id="pane-foe">
     <div class="board-col">
       <h3>Gegner: <span id="foe-name">—</span> <span id="foe-ships" class="pill"></span></h3>

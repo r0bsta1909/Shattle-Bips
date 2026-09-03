@@ -65,6 +65,30 @@ function who(slot) {
 }
 const foeName = () => state?.opponent?.name ?? 'Der Gegner';
 
+/**
+ * Kurze Meldung in der Bildmitte. Die roten Kacheln allein gehen unter -
+ * man schiesst, schaut auf die Knoepfe und bekommt nicht mit, dass gerade
+ * ein Schiff gesunken ist.
+ *
+ * kind: 'sunk' | 'good' | 'bad' | ''
+ * Ein zweiter Aufruf ueberschreibt den ersten und startet die Animation neu;
+ * eine Warteschlange waere hier falsch, weil die Meldungen einer Salve
+ * gleichzeitig entstehen und der Spieler nur das Wichtigste braucht.
+ */
+let flashTimer = null;
+function flash(text, kind = '', sub = '') {
+  const el = $('flash');
+  if (!el) return;
+  el.innerHTML = sub ? `${text}<small>${sub}</small>` : text;
+  el.className = `flash ${kind}`;
+  // Animation neu ausloesen: ohne den Zwischenschritt laeuft sie nicht erneut,
+  // wenn die Klasse schon dranhing.
+  void el.offsetWidth;
+  el.classList.add('show');
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => el.classList.remove('show'), 1500);
+}
+
 function log(html) {
   const li = document.createElement('li');
   li.innerHTML = html;
@@ -147,7 +171,21 @@ function handle(m) {
       // ueber den Zugwechsel stehen, loeste der naechste Klick eine Aufklaerung
       // aus, die der Server dann ablehnte (Issue #7).
       const turnChanged = !state || state.turn !== m.turn || state.turnCount !== m.turnCount;
+
+      // Dass der Gegner eines MEINER Schiffe versenkt hat, steht in keiner
+      // Nachricht - die Salve geht an ihn, ich bekomme nur "Beschuss auf ...".
+      // Der Verlust ist aber das Ereignisreichste, was einem passieren kann,
+      // also aus dem Zustand ableiten.
+      const sunkBefore = state ? state.own.ships.filter((sh) => sh.sunk).map((sh) => sh.type) : null;
       state = m; opts = m.options;
+      if (sunkBefore && m.status === 'playing') {
+        const verloren = m.own.ships.filter((sh) => sh.sunk && !sunkBefore.includes(sh.type));
+        if (verloren.length) {
+          const sym = SHIP_SYM[verloren[0].type] || '';
+          flash(`${sym} ${verloren[0].label} verloren`, 'bad',
+            `${m.opponent.name} hat getroffen`);
+        }
+      }
       if (turnChanged) {
         mode = 'normal'; selected.clear(); manShip = null;
         $('maneuver-panel').classList.add('hidden');
@@ -159,23 +197,42 @@ function handle(m) {
       break;
     }
 
-    case 'salvoResult':
+    case 'salvoResult': {
       for (const r of m.results) {
         if (r.result === 'water') log(`<i>Du</i> → ${coord(r.cell)}: Wasser.`);
         else if (r.result === 'hit') log(`<i>Du</i> → ${coord(r.cell)}: <b>Treffer.</b>`);
         else log(`<i>Du</i> → ${coord(r.cell)}: <b>${r.shipLabel} versenkt!</b>`);
       }
+      // Nur das Wichtigste einer Salve zeigen, nicht vier Meldungen nacheinander.
+      const sunk = m.results.filter((r) => r.result === 'sunk');
+      const hits = m.results.filter((r) => r.result === 'hit').length;
+      if (sunk.length) {
+        const sym = SHIP_SYM[sunk[0].shipType] || '';
+        flash(sunk.length > 1 ? `${sunk.length} Schiffe versenkt!` : `${sym} ${sunk[0].shipLabel} versenkt!`,
+          'sunk', sunk.length === 1 ? coord(sunk[0].cell) : '');
+      } else if (hits) {
+        flash(hits > 1 ? `${hits} Treffer!` : 'Treffer!', 'good');
+      }
       break;
+    }
 
     case 'scanResult':
       log(`<i>Du</i> → Aufklärung um <b>${coord(m.center)}</b>: <b>${m.count}</b> belegte Felder im 3×3-Feld.`);
+      flash(m.count === 0 ? 'Nichts geortet' : `${m.count} Felder belegt`,
+        m.count ? 'good' : '', `Aufklärung um ${coord(m.center)}`);
       break;
 
     case 'notice':
       // Jede Zeile nennt jetzt den Urheber – vorher stand da nur die Tatsache
       // und man wusste nicht, wen sie betrifft (Issue #12).
-      if (m.kind === 'maneuvered') log(`<i>${foeName()}</i> → <b>Flotte manövriert.</b>`);
-      if (m.kind === 'evaded') log(`<i>${foeName()}</i> → <b>U-Boot ausgewichen.</b> Deine Wasser-Meldungen dieser Salve sind zurückgesetzt.`);
+      if (m.kind === 'maneuvered') {
+        log(`<i>${foeName()}</i> → <b>Flotte manövriert.</b>`);
+        flash('Flotte manövriert', '', `${foeName()} hat ein Schiff versetzt`);
+      }
+      if (m.kind === 'evaded') {
+        log(`<i>${foeName()}</i> → <b>U-Boot ausgewichen.</b> Deine Wasser-Meldungen dieser Salve sind zurückgesetzt.`);
+        flash('U-Boot ausgewichen', 'bad', 'Deine Wasser-Meldungen dieser Salve gelten nicht mehr');
+      }
       if (m.kind === 'incoming') log(`<i>${foeName()}</i> → Beschuss auf ${m.cells.map(coord).join(', ')}.`);
       if (m.kind === 'timeout') log(`<i>${who(m.slot)}</i> → Zug verfallen, Zeit abgelaufen.`);
       if (m.kind === 'rematchDeclined') { closeRematchAsk(); $('rematch-hint').textContent = `${m.by} hat die Revanche abgelehnt.`; }

@@ -253,3 +253,53 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
   .screen#screen-game.active > #pane-log{grid-column:1}
   .screen#screen-game.active > .controls{grid-column:2;grid-row:1 / -1}
 }
+
+/* ===================================================== Ereignis-Einblendung
+   Die roten Kacheln allein gehen unter: man schiesst, schaut auf die Knoepfe
+   und merkt nicht, dass gerade ein Schiff gesunken ist. Eine kurze Meldung in
+   der Bildmitte holt das nach und verschwindet von selbst wieder.
+
+   pointer-events:none ist Pflicht - sonst liegt sie ueber dem Brett und
+   schluckt genau die Tipps, die man als naechstes machen will. */
+.flash{
+  position:fixed; left:50%; top:38%; transform:translate(-50%,-50%);
+  z-index:30; pointer-events:none;
+  max-width:min(90vw,420px); text-align:center;
+  padding:14px 22px; border-radius:14px;
+  background:rgba(13,27,38,.93); border:2px solid var(--accent);
+  box-shadow:0 10px 40px rgba(0,0,0,.55);
+  font-size:clamp(17px,5vw,24px); font-weight:700; line-height:1.25;
+  color:var(--ink);
+  opacity:0; visibility:hidden;
+}
+.flash.show{animation:flash-in 1.5s ease-out forwards}
+.flash.sunk{border-color:var(--hit);color:#ffd9d1}
+.flash.good{border-color:var(--accent);color:var(--accent)}
+.flash.bad{border-color:var(--hit);color:#f0836c}
+.flash small{display:block;font-size:.62em;font-weight:400;color:var(--muted);margin-top:3px}
+
+@keyframes flash-in{
+  0%   {opacity:0; visibility:visible; transform:translate(-50%,-50%) scale(.82)}
+  12%  {opacity:1; transform:translate(-50%,-50%) scale(1.04)}
+  20%  {transform:translate(-50%,-50%) scale(1)}
+  72%  {opacity:1}
+  100% {opacity:0; visibility:hidden; transform:translate(-50%,-56%) scale(.98)}
+}
+
+/* Wer Bewegung reduziert haben will, bekommt sie ohne Zoom und Versatz -
+   aber weiterhin die Meldung, sonst entginge ihm die Information. */
+@media(prefers-reduced-motion:reduce){
+  .flash.show{animation:flash-plain 1.5s ease-out forwards}
+  @keyframes flash-plain{
+    0%{opacity:0;visibility:visible} 10%{opacity:1} 75%{opacity:1}
+    100%{opacity:0;visibility:hidden}
+  }
+}
+
+/* Das Spielbrett steckt in keiner .card – der globale Abzug rechnet deren
+   28px Innenrand aber mit und macht die Kacheln unnoetig klein. Auf dem
+   Spielbildschirm binden 72px statt 100px: rund 10 % groessere Felder. */
+#screen-game{--cs:clamp(24px, min((100vw - 72px) / 10, (100dvh - 200px) / 10), 34px)}
+@media(max-width:779px){
+  #screen-game{--cs:clamp(22px, min((100vw - 72px) / 10, (100dvh - 330px) / 10), 34px)}
+}
