@@ -26,13 +26,35 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 - Werkzeugkette ist Teil der Fehlerquelle: Escapes nie durch ein Python-Heredoc schicken.
 - Client-Timer halten den Testprozess wach, genau wie die Zug-Timer serverseitig.
 
-**Offen**
-- #20 schlägt ein neues Salvensystem vor (1×4, 1×3, 1×2 als einmalige Ressourcen, sonst
-  Einzelschuss). Das ist eine Kernregeländerung — Entscheidung liegt beim Nutzer. Simulation
-  zeigt: „1 Schuss pro Zug" verlängert die Partie von 39 auf **103 Züge**.
-- Simulation widerspricht zwei Vermutungen aus #18: ohne Aufklärung sinkt die Comeback-Rate
-  auf 37 % und der Startvorteil steigt auf 53 %; mit nur 1 Köder sinkt sie auf 36 %. Beide
-  helfen also dem Zurückliegenden.
+- Versenkte Gegner sind auf dem Raster erkennbar (#18). `tracking` kannte nur
+  unbekannt/Wasser/Treffer; der Zustand trägt jetzt `sunkCells`. Leakt nichts — diese Felder
+  hat der Spieler selbst getroffen.
+
+**Zwei Entscheidungen liegen beim Nutzer — Issues bewusst offen**
+- **#20 Salvensystem.** Vorschlag: je 1× 4er/3er/2er-Salve als einmalige Ressource, sonst
+  Einzelschuss. Mechanisch reizvoll (Salve wird zur Entscheidung statt zur Funktion der
+  Restflotte), aber die Simulation warnt: „1 Schuss pro Zug" verlängert von 39 auf **103 Züge**.
+  Sein Vorschlag liegt bei geschätzt 80–90. Bei 60 s Zugzeit über anderthalb Stunden.
+  Drei Wege angeboten: als Lobby-Option, als neuer Standard, oder erst im Simulator messen.
+- **#15 Lobby-Übersicht.** Existiert nicht (nie gebaut, keine bewusste Entscheidung).
+  Eine öffentliche Liste hieße: Fremde sehen und betreten offene Lobbys. Drei Wege angeboten.
+
+**Balance-Daten (je 400 Partien) — widerlegen zwei Vermutungen aus #18**
+
+| Regelsatz | Start | Comeback | Züge Ø |
+|---|---|---|---|
+| Standard | 47,5 % | 41,0 % | 38,7 |
+| 1 Schuss/Zug | 50,5 % | 45,5 % | 103,3 |
+| ohne Aufklärung | 53,0 % | 37,0 % | 38,2 |
+| 1 Köder | 48,0 % | 36,0 % | 38,1 |
+
+Aufklärung und Köder sind **nicht** zu mächtig — sie helfen dem Zurückliegenden. Ohne sie
+steigt der Startvorteil und die Comeback-Rate fällt. Sie abzuschaffen macht das Spiel
+einseitiger, nicht ausgewogener.
+
+**Sonst offen**
+- Mobiles Layout weiter nicht auf echten Geräten getestet.
+- Jagdmodus simuliert, aber nicht gegen Menschen gespielt.
 
 ## 2026-09-03 · `da3bbd5` · v0.4.0 · b260903.13xx
 
