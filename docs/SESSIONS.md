@@ -7,6 +7,23 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-03 (Fortsetzung) · `4fd10db` · Ereignis-Einblendung
+
+**Geändert**
+- Kurze Meldung in der Bildmitte bei Versenkung, Treffern, Aufklärungsergebnis, Ausweichen,
+  gegnerischem Manöver und **eigenem Schiffsverlust**. Verschwindet nach 1,5 s von selbst,
+  `pointer-events:none`, `prefers-reduced-motion` respektiert.
+- Spielbrett rund 10 % größer: begrenzend war die **Breite**, nicht die Höhe — daher der
+  Leerraum unter dem Raster. Der globale `--cs`-Abzug rechnet 28 px Karten-Innenrand mit,
+  den das Spielbrett gar nicht hat.
+
+**Gelernt**
+- Der eigene Schiffsverlust steht in **keiner** Nachricht: die Salve geht an den Gegner, man
+  selbst bekommt nur „Beschuss auf …". Das ereignisreichste Ereignis überhaupt muss deshalb
+  aus dem Zustandswechsel abgeleitet werden.
+- Bei mehreren Ereignissen einer Salve nur das Wichtigste zeigen. Vier Meldungen nacheinander
+  vermitteln weniger als eine.
+
 ## 2026-09-03 (Fortsetzung) · `51de8ed` · Feste Spielansicht, Salven-Vorrat
 
 **Geändert**

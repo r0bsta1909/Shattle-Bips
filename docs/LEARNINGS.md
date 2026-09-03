@@ -110,6 +110,19 @@ gemessener Kopfzeile), scrollt selbst nicht, und ein Umschalter wählt den sicht
 Was gehandelt wird, steht immer da; was nachgeschlagen wird, ist einen Tipp entfernt.
 Quer bleibt alles gleichzeitig sichtbar — dort ist Platz.
 
+### Nicht jedes Ereignis steht in einer Nachricht
+Dass der Gegner ein eigenes Schiff versenkt hat, wird nirgends gemeldet: die Salve geht an
+ihn, der Betroffene bekommt nur `notice: incoming` mit den Feldern. Das Wichtigste, was einem
+passieren kann, muss deshalb aus dem **Zustandswechsel** abgeleitet werden (vorherige
+`own.ships` mit den neuen vergleichen). **Regel:** Bevor man ein Protokollfeld ergänzt,
+prüfen, ob der Zustand die Information schon trägt — und bei Ereignis-Einblendungen pro
+Aktion nur das Wichtigste zeigen, keine Warteschlange.
+
+### Eine Einblendung über dem Brett darf keine Tipps schlucken
+`pointer-events:none` ist bei allem Pflicht, was über der Spielfläche liegt. Sonst landet
+genau der Tipp, den man als Nächstes machen will, auf der Meldung. Und
+`prefers-reduced-motion` bekommt dieselbe Information ohne Bewegung — nicht gar keine.
+
 ### Die gesendete Menge kann die Entscheidung sein
 `applySalvo` verlangte „genau N Schüsse ansagen". Für den Salven-Vorrat, bei dem der Spieler
 pro Zug zwischen Einzelschuss und Salve wählt, brauchte es trotzdem **kein neues
