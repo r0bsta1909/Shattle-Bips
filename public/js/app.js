@@ -463,6 +463,72 @@ $('btn-rematch').onclick = () => { $('rematch-hint').textContent = 'Revanche ang
 $('btn-lobby').onclick = () => { show.pendingPlacement = false; show('screen-lobby'); };
 $('btn-quit').onclick = () => { localStorage.removeItem('nebel.token'); localStorage.removeItem('nebel.code'); location.href = location.origin; };
 
+// ------------------------------------------------------------- Programmstand
+// Steht dauerhaft im Kopf, damit Feedback einem Stand zuzuordnen ist.
+fetch('/version')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((v) => {
+    if (!v) throw new Error('keine Antwort');
+    $('version').textContent = v.label;
+    $('version').title = v.commit ? `Programmstand ${v.label} · Commit ${v.commit}` : `Programmstand ${v.label}`;
+  })
+  .catch(() => { $('version').textContent = ''; });
+
+// ----------------------------------------------------------------- Feedback
+const fbDialog = $('feedback-dialog');
+const fbText = $('feedback-text');
+const fbMsg = $('feedback-msg');
+
+const currentScreen = () => (document.querySelector('.screen.active') || {}).id || null;
+
+function fbSetMsg(text, kind) {
+  fbMsg.textContent = text;
+  fbMsg.className = `hint${kind ? ` msg-${kind}` : ''}`;
+}
+
+$('btn-feedback').onclick = () => {
+  fbSetMsg('');
+  $('feedback-send').disabled = false;
+  fbDialog.showModal();
+  fbText.focus();
+};
+$('feedback-cancel').onclick = () => fbDialog.close();
+fbText.addEventListener('input', () => { $('feedback-count').textContent = fbText.value.length; });
+
+$('feedback-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();                       // Dialog offen halten für die Rückmeldung
+  const text = fbText.value.trim();
+  if (text.length < 3) return fbSetMsg('Bitte ein paar Worte mehr.', 'err');
+
+  $('feedback-send').disabled = true;
+  fbSetMsg('wird gesendet…');
+  try {
+    const res = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        screen: currentScreen(),
+        code: myCode || null,
+        options: opts ? JSON.stringify(opts) : null
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      fbSetMsg(data.error || 'Konnte gerade nicht abgeschickt werden.', 'err');
+      $('feedback-send').disabled = false;
+      return;
+    }
+    fbSetMsg(`Danke! Angekommen${data.ref ? ` als ${data.ref}` : ''}.`, 'ok');
+    fbText.value = '';
+    $('feedback-count').textContent = '0';
+    setTimeout(() => fbDialog.close(), 1400);
+  } catch {
+    fbSetMsg('Keine Verbindung. Später noch einmal versuchen.', 'err');
+    $('feedback-send').disabled = false;
+  }
+});
+
 myToken = localStorage.getItem('nebel.token');
 myCode = localStorage.getItem('nebel.code');
 connect();

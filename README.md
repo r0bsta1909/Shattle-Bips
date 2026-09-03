@@ -80,19 +80,53 @@ Stellschraube im Playtest verschieben, ohne Code anzufassen:
 | Aufklärung / Tauchen / Manöver | an | einzeln abschaltbar |
 
 Der Jagdmodus ist die Antwort auf den Verdacht, dass eine volle Salve nach einem Treffer zu
-stark ist: Suchen bleibt breit, Nachsetzen wird teuer. Simulierbar über `npm run sim`, sobald
-`tools/sim.mjs` die Optionen durchreicht — im Playtest sofort umschaltbar.
+stark ist: Suchen bleibt breit, Nachsetzen wird teuer.
 
 Änderungen setzen die Aufstellungen beider Spieler zurück, weil sich die Köderzahl ändern kann.
+
+### Optionen durchsimulieren
+
+`tools/sim.mjs` nimmt dieselben Optionen wie die Lobby und schickt sie durch dasselbe
+`mergeOptions()`. Der Sim kann also keinen Regelsatz testen, der im Spiel nicht einstellbar wäre.
+
+```bash
+npm run sim -- 800                                # Standard
+node tools/sim.mjs 800 --singleShotAfterHit       # Jagdmodus
+node tools/sim.mjs 800 --minSalvo=1 --maxSalvo=3  # engere Salve
+node tools/sim.mjs 800 --decoyCount=0             # klassisches Spiel
+node tools/sim.mjs 800 --no-scanEnabled --seed=7  # ohne Aufklärung, eigener Seed
+```
+
+Schalter setzt man mit `--flag`, löscht sie mit `--no-flag`; Zahlen brauchen `--key=wert`.
+Der Kopf der Ausgabe nennt den Regelsatz und den Seed. Die Zielkorridore sind für den
+**Standardregelsatz** kalibriert und werden bei abweichenden Optionen bewusst nicht gedruckt —
+zum Vergleich denselben Seed einmal ohne Optionen laufen lassen.
+
+Erste Ergebnisse über je 300 Partien, Seed 20260903:
+
+| Regelsatz | Startspieler | Sieg nach Erstverlust | Züge Ø |
+|---|---|---|---|
+| Standard | 49,0 % | 42,3 % | 39,2 |
+| `--singleShotAfterHit` | 44,7 % | 43,0 % | 56,9 |
+| `--no-openingBalance` | 55,7 % | 34,3 % | 37,4 |
+| `--singleShotAfterHit --no-openingBalance` | 52,4 % | 40,2 % | 55,2 |
+| `--decoyCount=0` | 48,3 % | 41,7 % | 36,3 |
+
+Zwei Dinge fallen auf. Der Jagdmodus **allein überkorrigiert**: er dreht den Startvorteil in
+einen Nachteil (44,7 %), weil er zusätzlich zum Eröffnungsausgleich bremst — die beiden Regeln
+sind Substitute, keine Ergänzungen. Zusammen mit abgeschaltetem Eröffnungsausgleich landet er
+wieder in beiden Zielkorridoren (52,4 % / 40,2 %). Und er verlängert die Partie um gut 45 %
+(39 → 57 Züge), was bei 60 s Zugzeit spürbar ist.
 
 ## Tests
 
 ```bash
-npm test             # 25 Regeltests (node:test)
-npm run e2e          # vollständige Partie gegen den Bot über WebSocket
-npm run e2e:lobby    # zwei Clients, Lobby erstellen + beitreten
-npm run e2e:options  # Optionen, Zug-Timeout und Revanche
-npm run sim -- 800   # Headless-Balancing, Bot gegen Bot
+npm test              # 50 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung
+npm run e2e           # vollständige Partie gegen den Bot über WebSocket
+npm run e2e:lobby     # zwei Clients, Lobby erstellen + beitreten
+npm run e2e:options   # Optionen, Zug-Timeout und Revanche
+npm run e2e:feedback  # /version und der Feedback-Endpunkt über echtes HTTP
+npm run sim -- 800    # Headless-Balancing, Bot gegen Bot
 ```
 
 ## Deploy auf Render
@@ -115,13 +149,15 @@ Tier die ehrliche Antwort.
 ## Architektur
 
 ```
-server/rules.js   Regel-Engine, rein und ohne Seiteneffekte — Grundlage für Server, Bot und Sim
-server/bot.js     Probability-Density-Zielwahl, Ködererkennung, Gegnermodell
-server/rooms.js   Lobbys, Zugtimer, Zeitbank, Bot-Züge, autoritative Zustandsverteilung
-server/index.js   Express (statisch) + WebSocket
-public/           Client ohne Build-Schritt (ES-Module, DOM-Raster)
-tools/sim.mjs     Headless-Balancing auf derselben Engine
-test/             Regeltests + zwei End-to-End-Tests
+server/rules.js    Regel-Engine, rein und ohne Seiteneffekte — Grundlage für Server, Bot und Sim
+server/bot.js      Probability-Density-Zielwahl, Ködererkennung, Gegnermodell
+server/rooms.js    Lobbys, Zugtimer, Optionen, Revanche, Bot-Züge, autoritative Zustandsverteilung
+server/index.js    Express (statisch) + WebSocket + /version + /api/feedback
+server/version.js  Programmstand aus package.json, git und den Render-Variablen
+server/feedback.js Freitext-Feedback, drei Senken, Missbrauchsbremse
+public/            Client ohne Build-Schritt (ES-Module, DOM-Raster)
+tools/sim.mjs      Headless-Balancing auf derselben Engine, mit denselben Optionen
+test/              Regeltests, Sim-CLI, Feedback, Client-Kopplung + vier End-to-End-Tests
 ```
 
 **Der Server ist autoritativ.** Der Client erhält niemals die gegnerische Flotte — nur sein
@@ -159,6 +195,61 @@ Zahlen sind eine Untergrenze und ersetzen keinen Playtest mit Menschen.
 - **Scan und Tauchen senken die Salve auf minimal 1** (nicht 2). Sonst wären beide bei zwei verbliebenen Schiffen kostenlos.
 - **Kein Zeitbank-System.** Ein abgelaufener Zug geht an den Gegner. Die Bank hatte den Timer faktisch mehrfach neu gestartet, was wie ein Fehler wirkte statt wie eine Regel. Zwei Timeouts in Folge gelten als Aufgabe.
 
+## Programmstand und Feedback
+
+Im Kopf steht dauerhaft der Programmstand, z. B. `NEBEL v0.4.0 · b49`. `b49` ist die Anzahl der
+Commits auf `HEAD` — sie wächst mit jedem Commit und ist damit die fortlaufende Nummer. Der
+Server löst sie einmal beim Start auf, in dieser Reihenfolge:
+
+1. `APP_BUILD` / `APP_COMMIT`, falls gesetzt
+2. `git rev-list --count HEAD` im Arbeitsverzeichnis
+3. `RENDER_GIT_COMMIT` — Renders eingebaute Variable, dann steht dort der Kurz-Hash statt `b49`
+
+Fällt alles aus, bleibt die Semver-Nummer aus der `package.json`. Abrufbar unter `/version`.
+
+Der **Feedback**-Knopf daneben schickt Freitext an den eigenen Server; Programmstand,
+Bildschirm, Lobbycode, Regelsatz und Browser hängen automatisch dran. Der Server entscheidet,
+wohin das geht:
+
+| `FEEDBACK_SINK` | Ziel | Nötig |
+|---|---|---|
+| `github` | ein GitHub-Issue im Repo | `GITHUB_TOKEN`, optional `FEEDBACK_REPO` |
+| `webhook` | Discord- oder Slack-Kanal | `FEEDBACK_WEBHOOK_URL` |
+| `memory` | Ringpuffer im Prozess + Logzeile | — (Standard ohne Token) |
+
+Ohne `FEEDBACK_SINK` wählt der Server selbst: `github`, wenn ein Token da ist, sonst `webhook`,
+wenn eine URL da ist, sonst `memory`.
+
+**Einrichtung für GitHub-Issues** (das ist der Weg „Feedback landet im Repo"):
+
+1. Auf GitHub unter *Settings → Developer settings → Personal access tokens → Fine-grained*
+   ein Token nur für dieses Repo anlegen, Recht **Issues: Read and write**. Sonst nichts.
+2. Auf Render unter *Environment* `GITHUB_TOKEN` eintragen. Der Wert steht nie im Repo —
+   in der `render.yaml` ist die Variable als `sync: false` deklariert.
+3. Optional `FEEDBACK_REPO=user/repo` setzen. Ohne das nimmt der Server
+   `RENDER_GIT_REPO_SLUG`, also das Repo, aus dem deployt wird.
+
+Zwei Dinge sind dabei bewusst so gebaut:
+
+- **Der Token bleibt auf dem Server.** Der Browser postet an `/api/feedback`, kennt weder Token
+  noch Zielrepo und bekommt auch keine Fehlerdetails zu sehen — die stehen nur im Serverlog.
+- **Zwei Bremsen.** 5 Meldungen pro Absender und Stunde, 60 insgesamt. Ein offener Endpunkt,
+  der bei GitHub schreibt, ist sonst ein Missbrauchsziel. Über der Grenze kommt `429`.
+
+Zu bedenken: Dieses Repo ist **öffentlich**, Issues also auch. Wer das nicht will, setzt
+`FEEDBACK_REPO` auf ein privates Repo — der Token darf ein anderes Repo adressieren als das,
+aus dem deployt wird.
+
+**Warum kein Mailversand:** Render blockiert auf dem Free-Plan ausgehenden Verkehr auf die
+SMTP-Ports 25, 465 und 587. Klassischer Mailversand fällt damit aus; er ginge nur über einen
+HTTPS-Maildienst (Resend, Mailgun, Postmark) oder einen bezahlten Plan. Ein Webhook oder ein
+GitHub-Issue kostet nichts und braucht keinen zusätzlichen Dienst.
+
+**Warum keine Commits ins Repo:** Technisch ginge auch die Contents-API, also pro Feedback ein
+Commit in eine Datei. Das wäre aber ein Auto-Deploy pro Meldung, dazu Konflikte bei zwei
+gleichzeitigen Absendern und eine unbrauchbare Commit-Historie. Issues sind für genau diesen
+Zweck da.
+
 ## Bedienung
 
 - **Scans bleiben sichtbar.** Jedes aufgeklärte 3×3-Feld behält eine Umrandung auf dem Gegnerraster, im Mittelpunkt steht die gemeldete Anzahl. Man sieht also jederzeit, wo man schon hingeschaut hat und was dabei herauskam.
@@ -171,5 +262,6 @@ Zahlen sind eine Untergrenze und ersetzen keinen Playtest mit Menschen.
 - Replay-Overlay mit der Wahrscheinlichkeitskarte nach Partieende.
 - Sound.
 - Bot-Abnahme gegen Menschen: Zielkorridor 55–65 % Siegrate gegen erfahrene Spieler.
-- `tools/sim.mjs` kennt die Lobby-Optionen noch nicht — für das Durchsimulieren des Jagdmodus muss der Optionssatz durchgereicht werden.
 - Das mobile Layout ist nach Viewport-Breiten gebaut, aber nicht auf echten Geräten getestet.
+- Der Jagdmodus ist simuliert, aber nicht gegen Menschen gespielt. Die 57 Züge im Schnitt sind der Punkt, an dem er scheitern könnte.
+- Feedback in der Memory-Senke überlebt keinen Neustart. Das ist Absicht — wer es dauerhaft braucht, nimmt `github` oder `webhook`.

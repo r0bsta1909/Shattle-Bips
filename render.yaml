@@ -9,3 +9,30 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+
+      # ---------------------------------------------------------- Feedback
+      # Welche Senke: github | webhook | memory.
+      # Ohne Eintrag waehlt der Server selbst: github, wenn GITHUB_TOKEN da ist,
+      # sonst webhook, wenn eine URL da ist, sonst memory.
+      - key: FEEDBACK_SINK
+        value: github
+
+      # Fine-grained PAT mit "Issues: Read and write" auf genau diesem Repo.
+      # sync: false heisst: Wert wird im Render-Dashboard gesetzt, nie hier.
+      - key: GITHUB_TOKEN
+        sync: false
+
+      # Zielrepo fuer die Issues. Ohne Eintrag nimmt der Server
+      # RENDER_GIT_REPO_SLUG, also das Repo, aus dem deployt wird.
+      # Bewusst setzen, wenn das Feedback in ein privates Repo soll.
+      - key: FEEDBACK_REPO
+        sync: false
+
+      # Nur fuer FEEDBACK_SINK=webhook (Discord/Slack).
+      # - key: FEEDBACK_WEBHOOK_URL
+      #   sync: false
+
+      # Nur fuer FEEDBACK_SINK=memory: erlaubt GET /api/feedback.
+      # Ohne diese Variable gibt es den Leseendpunkt nicht.
+      # - key: FEEDBACK_ADMIN_TOKEN
+      #   sync: false

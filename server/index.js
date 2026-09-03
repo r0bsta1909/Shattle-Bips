@@ -11,18 +11,63 @@ import {
   setPlacement, tryStart, doSalvo, doManeuver, doDive, doScan,
   sweep, roomCount, randomPlacementForClient, lobbyState, setOptions, voteRematch
 } from './rooms.js';
+import { VERSION } from './version.js';
+import { submitFeedback, sweepLimits, feedbackStatus, readMemory, MAX_TEXT } from './feedback.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+
+// Auf Render steht genau ein Proxy davor. Ohne das landet jedes Feedback unter
+// derselben IP und die Pro-Absender-Bremse waere wirkungslos. Lokal bleibt es
+// aus, damit sich X-Forwarded-For nicht faelschen laesst.
+if (process.env.RENDER) app.set('trust proxy', 1);
+
 app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '1h' }));
-app.get('/healthz', (_req, res) => res.json({ ok: true, rooms: roomCount() }));
+app.get('/healthz', (_req, res) => res.json({ ok: true, rooms: roomCount(), version: VERSION.label }));
+
+// ------------------------------------------------------------------ Version
+// Der Client holt das beim Laden und schreibt es in die Kopfzeile.
+app.get('/version', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(VERSION);
+});
+
+// ----------------------------------------------------------------- Feedback
+app.post('/api/feedback', express.json({ limit: '16kb' }), async (req, res) => {
+  const body = req.body || {};
+  const r = await submitFeedback({
+    text: body.text,
+    ip: req.ip,
+    meta: {
+      screen: body.screen,
+      code: body.code,
+      options: body.options,
+      ua: req.get('user-agent')
+    }
+  });
+  if (!r.ok) {
+    if (r.detail) console.error('feedback:', r.detail);   // Interna nur ins Log
+    const code = r.status || (r.detail ? 502 : 400);      // 429 Bremse, 502 Senke, 400 Text
+    return res.status(code).json({ ok: false, error: r.error });
+  }
+  res.json({ ok: true, ref: r.ref || null, url: r.url || null });
+});
+
+// Nur fuer die Memory-Senke gedacht: ohne Token gibt es den Endpunkt nicht.
+app.get('/api/feedback', (req, res) => {
+  const want = process.env.FEEDBACK_ADMIN_TOKEN;
+  if (!want) return res.status(404).end();
+  if (req.get('x-admin-token') !== want) return res.status(401).json({ ok: false });
+  res.json({ ok: true, ...feedbackStatus(), entries: readMemory() });
+});
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 setInterval(sweep, 60_000);
+setInterval(() => sweepLimits(), 10 * 60_000);
 
 function fail(ws, msg) {
   if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'error', msg }));
@@ -174,4 +219,5 @@ setInterval(() => {
   }
 }, 30_000);
 
-server.listen(PORT, () => console.log(`NEBEL läuft auf :${PORT}`));
+server.listen(PORT, () =>
+  console.log(`NEBEL ${VERSION.label} läuft auf :${PORT} · Feedback: ${feedbackStatus().sink}`));
