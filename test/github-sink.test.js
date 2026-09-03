@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 
-import { submitFeedback, resetLimits } from '../server/feedback.js';
+import { submitFeedback, resetLimits, diagnose, explain, feedbackStatus } from '../server/feedback.js';
 
 /** Startet einen Server, der jede Anfrage aufzeichnet und `reply` zurückgibt. */
 async function withFakeGithub(reply, fn) {
@@ -83,10 +83,12 @@ test('GitHub-Senke: Fehler bleibt im Log, nicht in der Antwort', async () => {
     async () => {
       const r = await submitFeedback({ text: 'Irgendein Hinweis', ip: '2.2.2.2' });
       assert.equal(r.ok, false);
-      assert.equal(r.error, 'Konnte gerade nicht abgeschickt werden.');
+      // 401 ist ein Einrichtungsfehler – der Absender erfaehrt das, aber ohne Interna.
+      assert.equal(r.error, 'Feedback ist auf diesem Server nicht richtig eingerichtet.');
       assert.match(r.detail, /GitHub 401/, 'Detail fürs Log vorhanden');
       assert.ok(!r.error.includes('401'), 'Statuscode nicht an den Absender');
       assert.ok(!r.error.includes('credentials'), 'GitHub-Meldung nicht an den Absender');
+      assert.ok(!r.error.includes('ghp_'), 'niemals der Token');
     }
   );
 });
@@ -102,4 +104,104 @@ test('GitHub-Senke: leere Metadaten erzeugen keine leeren Zeilen', async () => {
       assert.match(sent.body, /\*\*Version:\*\*/, 'Version steht immer drin');
     }
   );
+});
+
+// ------------------------------------------------------------------ Diagnose
+
+/** Nachbau mit Routing: /repos/:slug und /repos/:slug/issues getrennt bedienbar. */
+async function withRoutedGithub(routes, fn) {
+  const server = http.createServer((req, res) => {
+    const hit = Object.keys(routes).find((k) => req.url.startsWith(k));
+    const r = hit ? routes[hit] : { status: 404, body: { message: 'Not Found' } };
+    res.writeHead(r.status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(r.body));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+
+  const saved = { ...process.env };
+  process.env.FEEDBACK_SINK = 'github';
+  process.env.GITHUB_TOKEN = 'ghp_testtoken';
+  process.env.FEEDBACK_REPO = 'u/r';
+  process.env.GITHUB_API_BASE = `http://127.0.0.1:${server.address().port}`;
+  try {
+    return await fn();
+  } finally {
+    await new Promise((r) => server.close(r));
+    for (const k of ['FEEDBACK_SINK', 'GITHUB_TOKEN', 'FEEDBACK_REPO', 'GITHUB_API_BASE']) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+    process.env.FEEDBACK_SINK = 'memory';
+  }
+}
+
+test('Diagnose: alles in Ordnung', async () => {
+  await withRoutedGithub(
+    { '/repos/u/r/issues': { status: 200, body: [] }, '/repos/u/r': { status: 200, body: { has_issues: true, private: false } } },
+    async () => {
+      const d = await diagnose();
+      assert.equal(d.ok, true);
+      assert.equal(d.reason, 'ok');
+      assert.match(explain(d), /einsatzbereit/);
+    }
+  );
+});
+
+test('Diagnose: Repo lesbar, aber Token darf keine Issues', async () => {
+  await withRoutedGithub(
+    { '/repos/u/r/issues': { status: 403, body: { message: 'Resource not accessible' } }, '/repos/u/r': { status: 200, body: { has_issues: true } } },
+    async () => {
+      const d = await diagnose();
+      assert.equal(d.ok, false);
+      assert.equal(d.reason, 'forbidden');
+      assert.match(explain(d), /Issues: Read and write/);
+    }
+  );
+});
+
+test('Diagnose: Issues im Repo abgeschaltet', async () => {
+  await withRoutedGithub(
+    { '/repos/u/r': { status: 200, body: { has_issues: false } } },
+    async () => {
+      const d = await diagnose();
+      assert.equal(d.reason, 'issues-disabled');
+      assert.match(explain(d), /abgeschaltet/);
+    }
+  );
+});
+
+test('Diagnose: Token abgelehnt', async () => {
+  await withRoutedGithub(
+    { '/repos/u/r': { status: 401, body: { message: 'Bad credentials' } } },
+    async () => {
+      const d = await diagnose();
+      assert.equal(d.reason, 'auth');
+      assert.match(explain(d), /401/);
+    }
+  );
+});
+
+test('Senkenfehler unterscheidet Konfiguration von Stoerung', async () => {
+  // 401 ist ein Einrichtungsfehler ...
+  await withFakeGithub({ status: 401, body: {} }, async () => {
+    const r = await submitFeedback({ text: 'Hinweis eins', ip: '9.1.1.1' });
+    assert.match(r.error, /nicht richtig eingerichtet/);
+  });
+  // ... 503 dagegen eine voruebergehende Stoerung.
+  await withFakeGithub({ status: 503, body: {} }, async () => {
+    const r = await submitFeedback({ text: 'Hinweis zwei', ip: '9.2.2.2' });
+    assert.match(r.error, /antwortet gerade nicht/);
+    assert.equal(r.reason, 'github-down');
+  });
+});
+
+test('Letzter Fehlschlag wird fuer die Diagnose gemerkt', async () => {
+  await withFakeGithub({ status: 401, body: {} }, async () => {
+    resetLimits();
+    await submitFeedback({ text: 'Wird scheitern', ip: '9.3.3.3' });
+    const s = feedbackStatus();
+    assert.ok(s.lastError, 'lastError gesetzt');
+    assert.equal(s.lastError.reason, 'auth');
+    assert.match(s.lastError.detail, /GitHub 401/);
+  });
 });

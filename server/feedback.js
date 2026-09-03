@@ -32,6 +32,7 @@ const hits = new Map();       // ip -> Zeitstempel[]
 let globalHits = [];
 const memory = [];            // juengste zuerst
 let counter = 0;
+let lastError = null;         // letzter Fehlschlag, fuer die Diagnose
 
 function prune(list, cutoff) {
   let i = 0;
@@ -45,6 +46,7 @@ export function resetLimits() {
   globalHits = [];
   memory.length = 0;
   counter = 0;
+  lastError = null;
 }
 
 export function checkLimit(ip, now = Date.now()) {
@@ -118,39 +120,123 @@ function sinkName() {
   return 'memory';
 }
 
-async function toGithub(text, meta) {
-  const token = process.env.GITHUB_TOKEN;
-  const repo = process.env.FEEDBACK_REPO || process.env.RENDER_GIT_REPO_SLUG;
-  if (!token) return { ok: false, error: 'Feedback ist auf diesem Server nicht eingerichtet.', detail: 'GITHUB_TOKEN fehlt' };
-  if (!repo) return { ok: false, error: 'Feedback ist auf diesem Server nicht eingerichtet.', detail: 'FEEDBACK_REPO fehlt' };
+const CONFIG_HINT = 'Feedback ist auf diesem Server nicht richtig eingerichtet.';
+const TRANSIENT_HINT = 'GitHub antwortet gerade nicht. Bitte später noch einmal.';
 
-  // Ueberschreibbar fuer Tests und GitHub Enterprise.
-  const api = (process.env.GITHUB_API_BASE || 'https://api.github.com').replace(/\/$/, '');
+export function githubTarget() {
+  return {
+    token: process.env.GITHUB_TOKEN || null,
+    repo: process.env.FEEDBACK_REPO || process.env.RENDER_GIT_REPO_SLUG || null,
+    // Ueberschreibbar fuer Tests und GitHub Enterprise.
+    api: (process.env.GITHUB_API_BASE || 'https://api.github.com').replace(/\/$/, '')
+  };
+}
+
+function ghHeaders(token) {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'nebel-feedback',      // ohne UA antwortet GitHub mit 403
+    'Content-Type': 'application/json'
+  };
+}
+
+/**
+ * Ordnet einen GitHub-Statuscode einer Ursache zu.
+ * 401 = Token ungueltig, 403 = Token hat das Recht nicht, 404 = Repo-Pfad falsch
+ * (GitHub antwortet auf fehlende Berechtigung teils mit 404 statt 403).
+ */
+function classify(status) {
+  if (status === 401) return { reason: 'auth', config: true };
+  if (status === 403) return { reason: 'forbidden', config: true };
+  if (status === 404) return { reason: 'not-found', config: true };
+  if (status === 422) return { reason: 'rejected', config: true };
+  if (status >= 500) return { reason: 'github-down', config: false };
+  return { reason: `http-${status}`, config: false };
+}
+
+async function toGithub(text, meta) {
+  const { token, repo, api } = githubTarget();
+  if (!token) return { ok: false, error: CONFIG_HINT, reason: 'no-token', detail: 'GITHUB_TOKEN fehlt' };
+  if (!repo) return { ok: false, error: CONFIG_HINT, reason: 'no-repo', detail: 'FEEDBACK_REPO und RENDER_GIT_REPO_SLUG fehlen' };
+
   const body = `${text}\n\n---\n${contextBlock(meta)}`;
   const res = await fetch(`${api}/repos/${repo}/issues`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'nebel-feedback',      // ohne UA antwortet GitHub mit 403
-      'Content-Type': 'application/json'
-    },
+    headers: ghHeaders(token),
     body: JSON.stringify({ title: `[Feedback] ${titleFor(text)}`, body, labels: ['feedback'] }),
     signal: AbortSignal.timeout(8000)
   });
 
   if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    return { ok: false, error: 'Konnte gerade nicht abgeschickt werden.', detail: `GitHub ${res.status}: ${detail.slice(0, 300)}` };
+    const raw = await res.text().catch(() => '');
+    const { reason, config } = classify(res.status);
+    return {
+      ok: false,
+      error: config ? CONFIG_HINT : TRANSIENT_HINT,
+      reason,
+      detail: `GitHub ${res.status} auf ${repo}: ${raw.slice(0, 300)}`
+    };
   }
   const issue = await res.json();
   return { ok: true, ref: `#${issue.number}`, url: issue.html_url };
 }
 
+// ------------------------------------------------------------------ Diagnose
+// Lesende Vorabpruefung. Beantwortet ohne Schreibzugriff und ohne Logsuche,
+// warum die GitHub-Senke nicht laeuft.
+export async function diagnose() {
+  const sink = sinkName();
+  if (sink !== 'github') return { sink, ok: true, reason: 'ok' };
+
+  const { token, repo, api } = githubTarget();
+  if (!token) return { sink, ok: false, reason: 'no-token' };
+  if (!repo) return { sink, ok: false, reason: 'no-repo' };
+
+  try {
+    const meta = await fetch(`${api}/repos/${repo}`, {
+      headers: ghHeaders(token),
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!meta.ok) return { sink, ok: false, repo, status: meta.status, ...classify(meta.status) };
+
+    const info = await meta.json().catch(() => ({}));
+    if (info.has_issues === false) return { sink, ok: false, repo, reason: 'issues-disabled' };
+
+    // Repo lesbar heisst noch nicht, dass der Token Issues schreiben darf.
+    // Ein fein granulierter Token vergibt Lesen und Schreiben gemeinsam,
+    // deshalb ist der Lesezugriff auf Issues ein brauchbarer Stellvertreter.
+    const issues = await fetch(`${api}/repos/${repo}/issues?per_page=1`, {
+      headers: ghHeaders(token),
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!issues.ok) return { sink, ok: false, repo, status: issues.status, ...classify(issues.status) };
+
+    return { sink, ok: true, reason: 'ok', repo, private: !!info.private };
+  } catch (err) {
+    return { sink, ok: false, repo, reason: 'unreachable', detail: String(err && err.message || err) };
+  }
+}
+
+/** Klartext fuer das Serverlog beim Start. */
+export function explain(d) {
+  switch (d.reason) {
+    case 'ok': return `Feedback-Senke ${d.sink} einsatzbereit${d.repo ? ` (${d.repo}${d.private ? ', privat' : ''})` : ''}.`;
+    case 'no-token': return 'Feedback-Senke github gewaehlt, aber GITHUB_TOKEN ist nicht gesetzt.';
+    case 'no-repo': return 'Feedback-Senke github gewaehlt, aber weder FEEDBACK_REPO noch RENDER_GIT_REPO_SLUG ist gesetzt.';
+    case 'auth': return `GITHUB_TOKEN wird von GitHub abgelehnt (401). Token abgelaufen, widerrufen oder mit Leerzeichen/Anfuehrungszeichen eingefuegt?`;
+    case 'forbidden': return `GITHUB_TOKEN darf auf ${d.repo} nicht zugreifen (403). Fehlt dem Token das Recht "Issues: Read and write"?`;
+    case 'not-found': return `${d.repo} ist fuer diesen Token nicht sichtbar (404). Stimmt der Repo-Pfad, und ist das Repo in der Tokenkonfiguration ausgewaehlt?`;
+    case 'issues-disabled': return `Issues sind fuer ${d.repo} abgeschaltet.`;
+    case 'unreachable': return `GitHub ist vom Server aus nicht erreichbar: ${d.detail}`;
+    default: return `Feedback-Senke ${d.sink}: ${d.reason}${d.status ? ` (HTTP ${d.status})` : ''}`;
+  }
+}
+
 async function toWebhook(text, meta) {
   const url = process.env.FEEDBACK_WEBHOOK_URL;
-  if (!url) return { ok: false, error: 'Feedback ist auf diesem Server nicht eingerichtet.', detail: 'FEEDBACK_WEBHOOK_URL fehlt' };
+  if (!url) return { ok: false, error: CONFIG_HINT, reason: 'no-webhook', detail: 'FEEDBACK_WEBHOOK_URL fehlt' };
 
   const payload = `**NEBEL-Feedback** (${VERSION.label})\n\n${text}\n\n${contextBlock(meta)}`;
   // "content" ist Discord, "text" ist Slack – beide ignorieren das jeweils andere Feld.
@@ -163,7 +249,8 @@ async function toWebhook(text, meta) {
 
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
-    return { ok: false, error: 'Konnte gerade nicht abgeschickt werden.', detail: `Webhook ${res.status}: ${detail.slice(0, 300)}` };
+    const { reason, config } = classify(res.status);
+    return { ok: false, error: config ? CONFIG_HINT : TRANSIENT_HINT, reason, detail: `Webhook ${res.status}: ${detail.slice(0, 300)}` };
   }
   return { ok: true };
 }
@@ -198,15 +285,18 @@ export async function submitFeedback({ text, meta = {}, ip } = {}) {
   if (!limit.ok) return limit;
 
   const sink = sinkName();
+  let r;
   try {
-    if (sink === 'github') return await toGithub(v.text, meta);
-    if (sink === 'webhook') return await toWebhook(v.text, meta);
-    return toMemory(v.text, meta);
+    if (sink === 'github') r = await toGithub(v.text, meta);
+    else if (sink === 'webhook') r = await toWebhook(v.text, meta);
+    else r = toMemory(v.text, meta);
   } catch (err) {
-    return { ok: false, error: 'Konnte gerade nicht abgeschickt werden.', detail: String(err && err.message || err) };
+    r = { ok: false, error: TRANSIENT_HINT, reason: 'threw', detail: String(err && err.message || err) };
   }
+  if (!r.ok) lastError = { at: new Date().toISOString(), reason: r.reason || 'unknown', detail: r.detail || null };
+  return r;
 }
 
 export function feedbackStatus() {
-  return { sink: sinkName(), version: VERSION.label };
+  return { sink: sinkName(), version: VERSION.label, lastError };
 }

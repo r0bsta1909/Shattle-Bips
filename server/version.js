@@ -1,12 +1,21 @@
 // NEBEL – Versionsauskunft. Einmal beim Start aufgeloest, danach konstant.
 //
-// Die Build-Nummer ist die Anzahl der Commits auf HEAD. Sie waechst mit jedem
-// Commit und ist damit die "fortlaufende" Nummer, die im Kopf steht.
-// Quellenreihenfolge, damit das ueberall funktioniert:
+// Die Build-Nummer leitet sich aus dem Zeitpunkt des Commits ab: bYYMMDD.HHMM
+// in UTC. Sie waechst mit jedem Commit, ist ueberall gleich aufgebaut und
+// laesst sich zwischen zwei Staenden direkt vergleichen.
+//
+// Warum nicht die Commit-Anzahl (`git rev-list --count HEAD`)? Die stand hier
+// zuerst, funktioniert lokal (b5) und ist auf Render trotzdem unbrauchbar:
+// Render klont mit --depth 1, die Zaehlung ergibt dort immer 1. Der Kopf haette
+// also dauerhaft "b1" gezeigt, egal wie oft deployt wird - genau das Gegenteil
+// einer fortlaufenden Nummer. Der Zeitstempel des Commits liegt dagegen auch im
+// flachen Klon vollstaendig vor.
+//
+// Quellenreihenfolge:
 //   1. APP_BUILD / APP_COMMIT  – explizit gesetzt (render.yaml, CI)
-//   2. git im Arbeitsverzeichnis – lokal und auf Render, das den Klon behaelt
+//   2. git im Arbeitsverzeichnis – lokal wie auf Render
 //   3. RENDER_GIT_COMMIT       – Renders eingebaute Variable, immer vorhanden
-// Faellt alles aus, bleibt die Semver-Nummer aus der package.json uebrig.
+// Faellt alles aus, bleibt die Semver-Nummer aus der package.json.
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -37,35 +46,39 @@ function readPkgVersion() {
   }
 }
 
+/** ISO-Zeitpunkt -> "260903.1106" (UTC, damit der Wert ortsunabhaengig ist). */
+export function buildStamp(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  return `${p(d.getUTCFullYear() % 100)}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}`
+    + `.${p(d.getUTCHours())}${p(d.getUTCMinutes())}`;
+}
+
 function resolve() {
   const version = readPkgVersion();
-
-  const envBuild = Number(process.env.APP_BUILD);
-  const build = Number.isFinite(envBuild) && envBuild > 0
-    ? Math.round(envBuild)
-    : Number(git(['rev-list', '--count', 'HEAD'])) || null;
 
   const commit =
     process.env.APP_COMMIT ||
     process.env.RENDER_GIT_COMMIT ||
     git(['rev-parse', 'HEAD']) ||
     null;
-
   const short = commit ? commit.slice(0, 7) : null;
 
-  // Was im Kopf steht: "v0.4.0 · b49" – bzw. der Commit, wenn kein Zaehler da ist.
+  const committedAt = git(['show', '-s', '--format=%cI', 'HEAD']);
+  const build = (process.env.APP_BUILD || '').trim() || (committedAt ? buildStamp(committedAt) : null);
+
+  // Nur als Zusatzinfo in /version – im flachen Klon ist der Wert wertlos,
+  // deshalb steht er bewusst nicht im Label.
+  const shallow = git(['rev-parse', '--is-shallow-repository']) === 'true';
+  const commitCount = shallow ? null : Number(git(['rev-list', '--count', 'HEAD'])) || null;
+
+  // Was im Kopf steht: "v0.4.0 · b260903.1106".
   let label = `v${version}`;
   if (build) label += ` · b${build}`;
   else if (short) label += ` · ${short}`;
 
-  return Object.freeze({ version, build, commit, short, label });
+  return Object.freeze({ version, build, commit, short, committedAt, commitCount, shallow, label });
 }
 
 export const VERSION = resolve();
-
-/** Eine Zeile fuer Logs und Feedback-Meldungen. */
-export function versionLine() {
-  const parts = [VERSION.label];
-  if (VERSION.build && VERSION.short) parts.push(VERSION.short);
-  return parts.join(' · ');
-}

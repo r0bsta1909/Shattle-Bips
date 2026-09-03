@@ -88,6 +88,20 @@ const okBody = await okRes.json();
 check(okRes.status === 200 && okBody.ok === true, 'gültiges Feedback: 200');
 check(typeof okBody.ref === 'string', `Referenz zurückgegeben: ${okBody.ref}`);
 
+// -------------------------------------------------------------- Diagnose
+const pubRes = await fetch(`${BASE}/api/feedback/status`);
+const pub = await pubRes.json();
+check(pubRes.status === 200, '/api/feedback/status antwortet');
+check(pub.sink === 'memory' && pub.ok === true, `Senke gemeldet: ${pub.sink}`);
+check(Object.keys(pub).sort().join(',') === 'ok,reason,sink',
+  `öffentlich nur sink/ok/reason (war: ${Object.keys(pub).join(',')})`);
+check(!('lastError' in pub) && !('repo' in pub), 'öffentlich keine Interna');
+
+const admRes = await fetch(`${BASE}/api/feedback/status`, { headers: { 'x-admin-token': 'test-admin-token' } });
+const adm = await admRes.json();
+check(typeof adm.hint === 'string' && adm.hint.length > 0, `mit Token gibt es Klartext: "${adm.hint}"`);
+check(!!adm.version && adm.version.label === v.label, 'mit Token kommt der Programmstand mit');
+
 // ------------------------------------------------------------- Adminzugriff
 check((await fetch(`${BASE}/api/feedback`)).status === 401, 'Adminliste ohne Token: 401');
 

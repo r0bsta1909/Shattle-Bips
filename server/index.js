@@ -12,7 +12,7 @@ import {
   sweep, roomCount, randomPlacementForClient, lobbyState, setOptions, voteRematch
 } from './rooms.js';
 import { VERSION } from './version.js';
-import { submitFeedback, sweepLimits, feedbackStatus, readMemory, MAX_TEXT } from './feedback.js';
+import { submitFeedback, sweepLimits, feedbackStatus, readMemory, diagnose, explain } from './feedback.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -67,6 +67,28 @@ app.post('/api/feedback', express.json({ limit: '16kb' }), async (req, res) => {
     return res.status(code).json({ ok: false, error: r.error });
   }
   res.json({ ok: true, ref: r.ref || null, url: r.url || null });
+});
+
+// Diagnose, damit ein kaputter Feedback-Weg nicht im Serverlog gesucht werden muss.
+// Oeffentlich steht hier nur, ob die Senke arbeitsfaehig ist und woran es sonst
+// liegt - keine Tokens, keine GitHub-Rohantworten. Mit FEEDBACK_ADMIN_TOKEN
+// kommen Repo-Pfad, Statuscode und der letzte Fehlschlag dazu.
+app.get('/api/feedback/status', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const d = await diagnose();
+  const admin = process.env.FEEDBACK_ADMIN_TOKEN
+    && req.get('x-admin-token') === process.env.FEEDBACK_ADMIN_TOKEN;
+
+  if (!admin) return res.json({ sink: d.sink, ok: d.ok, reason: d.reason });
+
+  // Bewusst Feld fuer Feld statt Spread: feedbackStatus() fuehrt selbst ein
+  // "version" (den Labelstring) und wuerde das Versionsobjekt still ueberschreiben.
+  res.json({
+    ...d,
+    hint: explain(d),
+    version: VERSION,
+    lastError: feedbackStatus().lastError
+  });
 });
 
 // Nur fuer die Memory-Senke gedacht: ohne Token gibt es den Endpunkt nicht.
@@ -233,5 +255,9 @@ setInterval(() => {
   }
 }, 30_000);
 
-server.listen(PORT, () =>
-  console.log(`NEBEL ${VERSION.label} läuft auf :${PORT} · Feedback: ${feedbackStatus().sink}`));
+server.listen(PORT, async () => {
+  console.log(`NEBEL ${VERSION.label} läuft auf :${PORT}`);
+  // Einmal beim Start pruefen, damit eine falsch gesetzte Variable sofort
+  // im Log steht statt erst beim ersten Feedback eines Spielers.
+  try { console.log(explain(await diagnose())); } catch { /* Diagnose darf den Start nie verhindern */ }
+});

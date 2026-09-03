@@ -121,7 +121,7 @@ wieder in beiden Zielkorridoren (52,4 % / 40,2 %). Und er verlängert die Partie
 ## Tests
 
 ```bash
-npm test              # 50 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung
+npm test              # 56 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung
 npm run e2e           # vollständige Partie gegen den Bot über WebSocket
 npm run e2e:lobby     # zwei Clients, Lobby erstellen + beitreten
 npm run e2e:options   # Optionen, Zug-Timeout und Revanche
@@ -197,15 +197,16 @@ Zahlen sind eine Untergrenze und ersetzen keinen Playtest mit Menschen.
 
 ## Programmstand und Feedback
 
-Im Kopf steht dauerhaft der Programmstand, z. B. `NEBEL v0.4.0 · b49`. `b49` ist die Anzahl der
-Commits auf `HEAD` — sie wächst mit jedem Commit und ist damit die fortlaufende Nummer. Der
-Server löst sie einmal beim Start auf, in dieser Reihenfolge:
+Im Kopf steht dauerhaft der Programmstand, z. B. `NEBEL v0.4.0 · b260903.1106`. Die Build-Nummer
+ist der Zeitpunkt des Commits als `bYYMMDD.HHMM` in UTC — sie wächst mit jedem Commit, ist
+überall gleich aufgebaut und lässt zwei Stände direkt vergleichen. Der Server löst sie einmal
+beim Start auf: `APP_BUILD` / `APP_COMMIT`, sonst `git`, sonst `RENDER_GIT_COMMIT`. Fällt alles
+aus, bleibt die Semver-Nummer aus der `package.json`. Abrufbar unter `/version`.
 
-1. `APP_BUILD` / `APP_COMMIT`, falls gesetzt
-2. `git rev-list --count HEAD` im Arbeitsverzeichnis
-3. `RENDER_GIT_COMMIT` — Renders eingebaute Variable, dann steht dort der Kurz-Hash statt `b49`
-
-Fällt alles aus, bleibt die Semver-Nummer aus der `package.json`. Abrufbar unter `/version`.
+Hier stand zuerst die Commit-Anzahl (`git rev-list --count HEAD`). Das funktioniert lokal und ist
+auf Render trotzdem unbrauchbar: Render klont mit `--depth 1`, die Zählung ergibt dort immer `1`.
+Der Kopf hätte dauerhaft `b1` gezeigt, egal wie oft deployt wird — das Gegenteil einer
+fortlaufenden Nummer. Der Zeitstempel des Commits liegt auch im flachen Klon vollständig vor.
 
 Der **Feedback**-Knopf daneben schickt Freitext an den eigenen Server; Programmstand,
 Bildschirm, Lobbycode, Regelsatz und Browser hängen automatisch dran. Der Server entscheidet,
@@ -235,6 +236,22 @@ Zwei Dinge sind dabei bewusst so gebaut:
   noch Zielrepo und bekommt auch keine Fehlerdetails zu sehen — die stehen nur im Serverlog.
 - **Zwei Bremsen.** 5 Meldungen pro Absender und Stunde, 60 insgesamt. Ein offener Endpunkt,
   der bei GitHub schreibt, ist sonst ein Missbrauchsziel. Über der Grenze kommt `429`.
+
+**Wenn es nicht geht:** `GET /api/feedback/status` sagt ohne Umweg über das Serverlog, woran es
+liegt. Öffentlich steht dort nur `{sink, ok, reason}` — keine Tokens, keine GitHub-Rohantworten.
+Mit `FEEDBACK_ADMIN_TOKEN` im Header `x-admin-token` kommen Repo-Pfad, Statuscode, der letzte
+Fehlschlag und ein Klartextsatz dazu. Dieselbe Prüfung läuft beim Serverstart und landet als
+eine Zeile im Log. Mögliche `reason`-Werte:
+
+| `reason` | Bedeutung |
+|---|---|
+| `no-token` | `GITHUB_TOKEN` ist nicht gesetzt |
+| `no-repo` | weder `FEEDBACK_REPO` noch `RENDER_GIT_REPO_SLUG` gesetzt |
+| `auth` | GitHub lehnt den Token ab (401) — abgelaufen, widerrufen, oder mit Anführungszeichen eingefügt |
+| `forbidden` | Token darf nicht auf das Repo (403) — fehlt „Issues: Read and write"? |
+| `not-found` | Repo für diesen Token nicht sichtbar (404) — Pfad falsch oder Repo nicht im Token ausgewählt |
+| `issues-disabled` | Issues sind im Repo abgeschaltet |
+| `github-down` | GitHub antwortet mit 5xx — vorübergehend, nichts zu tun |
 
 Zu bedenken: Dieses Repo ist **öffentlich**, Issues also auch. Wer das nicht will, setzt
 `FEEDBACK_REPO` auf ein privates Repo — der Token darf ein anderes Repo adressieren als das,
