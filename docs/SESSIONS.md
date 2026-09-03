@@ -7,6 +7,30 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-03 (Fortsetzung) · `cacd71a` · Hochkant auf dem iPhone
+
+Aus Screenshots vom Gerät, nicht aus einem Issue. Das Spiel war nur quer benutzbar.
+
+**Geändert**
+- `--cs` an **beide** Achsen gekoppelt statt `min(9vw,34px)`. Die Rasterbeschriftung aus
+  Runde 3 hatte die Breite gesprengt: Aufstellung brauchte 433 px auf 393 px Schirm.
+- Flottenübersicht aus der klebenden Leiste in eine eigene Karte. Die Leiste durfte `52vh`
+  hoch werden und verdeckte hochkant die halbe Spielfläche.
+- `env(safe-area-inset-bottom)` gesetzt — Safaris untere Leiste überlagerte den Seitenfuß.
+- Zerstörer-Symbol mit U+FE0E als Text statt schwarzem Emoji-Quadrat; leere Modus-Kapsel weg.
+
+**Gelernt**
+- **Quer erzwingen geht auf dem iPhone nicht** — kein Orientation-Lock in Safari. Hochkant
+  muss funktionieren, ein „bitte drehen" ist keine Lösung.
+- Layout-Geometrie ist statisch nicht prüfbar. Kein Test hätte den abgeschnittenen Rand
+  gefunden; nur der Blick aufs Gerät. Deshalb prüfen die neuen Tests die **Form** der Regel
+  (beide Achsen gekoppelt, kein Überschreiben im Media-Block), nicht die Pixel.
+- Der neue Test schlug zuerst an meiner eigenen Prosa fehl: ein Kommentar zitiert die alte
+  Deklaration. CSS-Tests entfernen jetzt Kommentare vor der Analyse.
+
+**Offen**
+- Am Gerät gegenprüfen: alle zehn Spalten hochkant, Reihen 6–10 erreichbar, Fußzeile frei.
+
 ## 2026-09-03 (Fortsetzung) · Playtest-Runde 3
 
 **Geändert**

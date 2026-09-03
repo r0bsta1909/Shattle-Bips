@@ -80,6 +80,40 @@ eindeutig sind und dass keine Container beschrieben werden. Ohne Typen und Build
 einzige Instanz, die solche Fehler vor dem Nutzer findet. **Neue Client-Fehlerklasse ⇒ hier
 eine Prüfung ergänzen.**
 
+### Wer die Rastergeometrie ändert, muss `--cs` nachrechnen
+**Symptom:** Auf dem iPhone war Spalte J abgeschnitten, hochkant war das Spiel unbenutzbar.
+**Ursache:** `--cs: min(9vw, 34px)` landet auf jedem aktuellen iPhone bei 34 px. Die
+Rasterbeschriftung hat einen 16-px-Streifen plus Lücke hinzugefügt — damit brauchte die
+Aufstellung 433 px auf einem 393-px-Schirm. Vorher waren es 386 px, es passte knapp. **Kein
+Test konnte das merken:** Layout-Geometrie ist statisch nicht prüfbar, und das Mini-DOM rechnet
+keine Pixel.
+**Regel:** `--cs` ist an **beide** Achsen gekoppelt und lässt Reserve:
+`clamp(24px, min((100vw - 100px)/10, (100dvh - 190px)/10), 34px)`. Die 100 px sind alles, was
+neben den Zellen Breite kostet, plus 7 px Puffer — eine Punktlandung bricht bei Rundung oder
+sichtbarer Scrollleiste. Wer Ränder, Streifen oder Lücken am Raster ändert, rechnet die Zahl
+nach. `dvh` statt `vh`, weil Safaris Leisten ein- und ausfahren. Und: `--cs` **nicht** in einem
+Media-Block überschreiben — das hebelt die Höhenkopplung genau quer aus, wo der Schirm niedrig ist.
+
+### Quer erzwingen geht auf dem iPhone nicht
+`screen.orientation.lock()` ist in Safari nicht verfügbar, und Apple bietet keine Möglichkeit,
+die Ausrichtung für eine Webseite festzulegen — ohne native App und Vollbild geht das nicht.
+Man kann nur *bitten* zu drehen. Wer die Rotationssperre aktiviert hat, könnte dann gar nicht
+spielen. **Regel:** Hochkant muss funktionieren, ein Rotationshinweis ist keine Lösung.
+Dazu gehört `env(safe-area-inset-bottom)` — `viewport-fit=cover` im Meta-Tag allein bewirkt
+nichts, der Abstand muss auch gesetzt werden.
+
+### Nur Aktionen kleben, Nachschlagewerk scrollt
+Die klebende Bedienleiste durfte `52vh` hoch werden und trug zusätzlich die Flottenübersicht —
+hochkant verdeckte sie die halbe Spielfläche. **Regel:** In den klebenden Bereich gehört, was
+man zum Handeln braucht; was man nachschlägt, scrollt darunter. Der Scrollraum kommt aus
+`--controls-h`, das der Client aus der gemessenen Höhe setzt — eine feste Zahl wird beim
+nächsten Knopf falsch.
+
+### CSS-Tests müssen Kommentare entfernen
+Der Test für `--cs` schlug an der eigenen Prosa fehl: ein Kommentar **zitiert** die alte
+Deklaration (`--cs:34px`), und die Regex las rohen Text. **Regel:** Vor jeder Analyse
+`css.replace(/\/\*[\s\S]*?\*\//g, '')`. Betrifft alle Tests, die CSS nach Mustern durchsuchen.
+
 ### Farbe allein trägt nicht
 Schiff `#3f6d84`, gegnerischer Fehlschuss `#2a5670` und leeres Wasser `#17394d` waren drei
 ähnliche Blautöne und praktisch nicht zu trennen. Jeder Zustand auf dem eigenen Brett trägt
