@@ -361,3 +361,28 @@ test('Revanche-Anfrage oeffnet den Dialog (#13)', async () => {
   byId.get('rematch-decline').onclick();
   assert.equal(byId.get('rematch-dialog').open, false, 'Ablehnen schliesst ihn');
 });
+
+test('Versenkte Gegner heben sich von blossen Treffern ab (#18)', async () => {
+  const { byId, feed } = await bootClient();
+  const m = stateMsg();
+  m.tracking = new Array(100).fill(0);
+  for (const i of [10, 11]) m.tracking[i] = 2;   // versenktes Schiff
+  for (const i of [30, 31]) m.tracking[i] = 2;   // nur angeschlagen
+  m.sunkCells = [10, 11];
+  feed(m);
+
+  const foe = byId.get('foe-grid').children;
+  assert.ok(foe[10]._classes.has('sunk'), 'versenktes Feld ist als versenkt markiert');
+  assert.ok(!foe[10]._classes.has('hit'), 'und nicht mehr nur als Treffer');
+  assert.ok(foe[30]._classes.has('hit'), 'angeschlagenes Feld bleibt Treffer');
+  assert.ok(!foe[30]._classes.has('sunk'));
+});
+
+test('Ohne sunkCells bleibt alles beim Alten', async () => {
+  const { byId, feed } = await bootClient();
+  const m = stateMsg();
+  m.tracking[10] = 2;
+  delete m.sunkCells;                            // aeltere Serverfassung
+  assert.doesNotThrow(() => feed(m));
+  assert.ok(byId.get('foe-grid').children[10]._classes.has('hit'));
+});

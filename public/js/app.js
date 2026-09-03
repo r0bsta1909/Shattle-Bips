@@ -396,12 +396,15 @@ function renderGame() {
   if (!foe.children.length) { buildGrid(foe, onFoeClick, onFoeHover); buildGrid($('own-grid'), onOwnClick, null); }
 
   // Gegnerbrett inkl. Scan-Historie
+  // Versenkte Schiffe heben sich von blossen Treffern ab - vorher sah beides
+  // gleich aus und man wusste nicht, was man schon erledigt hat (Issue #18).
+  const sunkSet = new Set(state.sunkCells || []);
   for (let i = 0; i < N * N; i++) {
     const el = foe.children[i];
     el.className = 'cell'; el.textContent = '';
     const v = state.tracking[i];
     if (v === 1) el.classList.add('miss');
-    if (v === 2) el.classList.add('hit');
+    if (v === 2) el.classList.add(sunkSet.has(i) ? 'sunk' : 'hit');
     if (selected.has(i)) el.classList.add('sel');
   }
   for (const s of state.scans || []) {

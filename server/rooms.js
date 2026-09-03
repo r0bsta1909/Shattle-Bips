@@ -185,6 +185,11 @@ export function pushState(room) {
       scans: me.scans,
       options: g.options,
       sunkEnemy: me.sunkEnemy,
+      // Welche Treffer zu einem versenkten Schiff gehoeren. Verraet nichts:
+      // jedes Feld eines versenkten Schiffs hat der Spieler selbst getroffen,
+      // steht bei ihm also ohnehin auf HIT. Ohne das sieht ein versenktes
+      // Schiff auf dem Gegnerraster aus wie ein angeschlagenes (Issue #18).
+      sunkCells: foe.ships.filter((sh) => sh.hits.length >= sh.len).flatMap((sh) => sh.cells),
       shots: g.turn === i ? requiredShots(g, i) : 0,
       baseSalvo: baseSalvo(g, i),
       // Die Optionsflags fehlten hier: bei abgeschalteter Aufklärung blieb der
