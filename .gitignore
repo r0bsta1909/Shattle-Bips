@@ -2,3 +2,7 @@ node_modules/
 npm-debug.log*
 .env
 .DS_Store
+
+# Update-Lieferungen: vollstaendige Projektkopien, gehoeren nicht ins Repo
+/update/
+/nebel/
