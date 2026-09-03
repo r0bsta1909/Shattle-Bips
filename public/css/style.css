@@ -19,7 +19,7 @@
      Rückfall für Browser ohne clamp/min/dvh – eine ungültige Deklaration
      verwirft nur sich selbst, der Vorgänger bleibt stehen. */
   --cs:30px;
-  --cs:clamp(24px, min((100vw - 100px) / 10, (100dvh - 190px) / 10), 34px);
+  --cs:clamp(24px, min((100vw - 100px) / 10, (100dvh - 200px) / 10), 34px);
 }
 *{box-sizing:border-box}
 html,body{overscroll-behavior-y:contain}
@@ -115,8 +115,6 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 .ship-list li.done{opacity:.45}
 .banner{padding:9px 12px;border-radius:9px;background:#0f2231;border:1px solid var(--line);font-weight:600}
 .banner.you{border-color:var(--accent);color:var(--accent)}
-.controls.sticky{position:sticky;bottom:0;z-index:15;
-  box-shadow:0 -8px 20px rgba(0,0,0,.35)}
 .man-panel{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}
 .man-panel button[data-move]{flex:1 1 30%}
 #maneuver-ships button{flex:1 1 44%;font-size:13px}
@@ -133,14 +131,6 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
   h1{font-size:22px}
   .screen#screen-game{display:none}
   .screen#screen-game.active{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start}
-  .controls.sticky{position:static;box-shadow:none}
-
-  /* Ausdrueckliche Platzierung, seit die Flottenuebersicht eine eigene Karte
-     ist: als fuenftes Kind wuerde sie sonst in die Gitterautomatik fallen. */
-  .screen#screen-game.active > .board-col,
-  .screen#screen-game.active > .log-card { grid-column:1 }
-  .screen#screen-game.active > .controls { grid-column:2; grid-row:1 }
-  .screen#screen-game.active > .info     { grid-column:2; grid-row:2 / -1 }
   .place-wrap{flex-direction:row}
   .place-side{flex:1;min-width:250px}
   .row.stack>button{flex:0 1 auto}
@@ -195,25 +185,10 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 .fleet-list li.gone{opacity:.45;text-decoration:line-through}
 .fleet-list li.hurt .name{color:var(--accent)}
 
-/* Die klebende Bedienleiste verdeckte hochkant die halbe Spielflaeche: sie
-   durfte 52vh hoch werden und trug zusaetzlich die Flottenuebersicht. Die ist
-   jetzt eine eigene Karte, die Leiste enthaelt nur noch Zugstand und Aktionen.
-
-   --controls-h setzt der Client aus der gemessenen Hoehe (ResizeObserver).
-   Der Standardwert traegt, solange die Messung nicht da ist. So bleibt unter
-   dem letzten Inhalt genug Platz, damit die Leiste nie etwas dauerhaft
-   verdeckt. */
-#screen-game{padding-bottom:calc(var(--controls-h, 180px) + env(safe-area-inset-bottom) + 12px)}
-
-@media(min-width:780px){
-  /* Zweispaltig steht die Leiste fest, der Zuschlag waere nur leerer Raum. */
-  #screen-game{padding-bottom:12px}
-}
-
 /* Safaris untere Leiste ueberlagert sonst den Seitenfuss – viewport-fit=cover
    allein reicht nicht, der Abstand muss auch gesetzt werden. */
 main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
-.controls.sticky{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+.controls{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
 .place-side{padding-bottom:env(safe-area-inset-bottom)}
 
 /* Ohne Inhalt blieb eine leere Kapsel neben "Zeit" stehen. */
@@ -223,3 +198,58 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
 .grid.foe .cell.hit::after{content:"✕";font-size:calc(var(--cs) * .5);color:#ffd9d1;line-height:1}
 .grid.foe .cell.sunk{box-shadow:inset 0 0 0 2px #d8695a}
 .grid.foe .cell.sunk::after{content:"✕";font-size:calc(var(--cs) * .5);color:#ffe2db;line-height:1}
+
+/* ==================================================== Feste Spielansicht
+   Hochkant passen Gegnerraster, Bedienleiste UND eigenes Raster nie
+   gleichzeitig auf den Schirm. Vorher klebte die Leiste unten und schob sich
+   ueber die Reihen 9-10 (#22, #23). Jetzt scrollt die Ansicht gar nicht:
+   Kopfzeile, Umschalter, ein Bereich und die Bedienleiste sind fest. */
+
+.game-tabs{display:flex;gap:6px;margin-bottom:10px}
+.game-tabs .tab{flex:1 1 0;min-height:38px;padding:8px 6px;font-size:14px;
+  background:#0f2231;color:var(--muted);white-space:nowrap}
+.game-tabs .tab.active{background:#1b3a4e;color:var(--ink);border-color:var(--accent)}
+
+/* Zugzeile: Zustand und Werte in EINER Zeile statt in drei Bloecken. */
+.banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.banner-stats{margin-left:auto;display:flex;gap:8px;align-items:center;
+  font-weight:400;font-size:13px;color:var(--muted);white-space:nowrap}
+.banner-stats span:empty{display:none}
+#salvo-count,#clock{background:#0d1b26;border:1px solid var(--line);
+  border-radius:99px;padding:3px 9px}
+#mode-pill{color:var(--accent)}
+
+/* Vier Knoepfe in EINER Reihe statt umbrechend in zwei. */
+.row.actions{gap:6px;margin:8px 0}
+.row.actions button{flex:1 1 0;min-width:0;padding:11px 4px;font-size:14px}
+
+/* Reservieren keine Hoehe, wenn leer – das waren zusammen ~40px. */
+#game-error:empty,#scan-hint:empty{display:none;margin:0}
+
+@media(max-width:779px){
+  /* Hochkant kostet die feste Ansicht mehr Hoehe als quer: Kopfzeile 64
+     + Umschalter 48 + Ueberschrift 26 + Bedienleiste ~152 + Raender ~40. */
+  :root{--cs:clamp(22px, min((100vw - 100px) / 10, (100dvh - 330px) / 10), 34px)}
+
+  .screen#screen-game.active{
+    display:grid;
+    grid-template-rows:auto 1fr auto;
+    height:calc(100dvh - var(--header-h, 64px));
+    overflow:hidden;
+  }
+  .game-pane{overflow:auto;min-height:0}     /* nur der Inhalt scrollt, nie das Brett */
+  .game-pane:not(.active){display:none}
+  .controls{margin-bottom:0}
+  .row.actions button{font-size:13px;padding:11px 2px}
+  main{padding-bottom:0}
+}
+
+@media(min-width:780px){
+  /* Quer ist alles gleichzeitig sichtbar, der Umschalter waere nur im Weg. */
+  .game-tabs{display:none}
+  .game-pane{display:block !important}
+  .screen#screen-game.active > #pane-foe,
+  .screen#screen-game.active > #pane-own,
+  .screen#screen-game.active > #pane-log{grid-column:1}
+  .screen#screen-game.active > .controls{grid-column:2;grid-row:1 / -1}
+}

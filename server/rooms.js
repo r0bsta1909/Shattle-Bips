@@ -192,6 +192,10 @@ export function pushState(room) {
       sunkCells: foe.ships.filter((sh) => sh.hits.length >= sh.len).flatMap((sh) => sh.cells),
       shots: g.turn === i ? requiredShots(g, i) : 0,
       baseSalvo: baseSalvo(g, i),
+      // Bei laufendem Vorrat ist "shots" die Obergrenze, nicht die Pflicht -
+      // der Spieler waehlt zwischen Einzelschuss und Salve.
+      salvoPool: (g.options || {}).salvoPool === true,
+      salvosLeft: me.salvosLeft,
       // Die Optionsflags fehlten hier: bei abgeschalteter Aufklärung blieb der
       // Knopf bedienbar und der Server wies den Klick erst hinterher ab.
       canScan: (g.options || {}).scanEnabled !== false

@@ -103,11 +103,37 @@ function makeDoc() {
   }
 
   const all = (root) => root.children.flatMap((c) => [c, ...all(c)]);
-  const matches = (el, sel) => {
-    if (sel.startsWith('.')) return el._classes.has(sel.slice(1));
-    if (sel.startsWith('#')) return el._id === sel.slice(1);
-    return el.tagName === sel.toUpperCase();
+
+  /** Ein Einzelteil: .klasse, #id, tag, jeweils optional mit [attribut]. */
+  const simple = (el, s) => {
+    const attr = s.match(/\[([\w-]+)\]$/);
+    if (attr) {
+      const key = attr[1].replace(/^data-/, '').replace(/-(\w)/g, (_, c) => c.toUpperCase());
+      if (el.dataset[key] === undefined) return false;
+      s = s.slice(0, attr.index);
+      if (!s) return true;
+    }
+    if (s.startsWith('.')) return el._classes.has(s.slice(1));
+    if (s.startsWith('#')) return el._id === s.slice(1);
+    return el.tagName === s.toUpperCase();
   };
+
+  /**
+   * Nachfahren-Ketten und Kommalisten. Ohne das fand querySelectorAll
+   * ".game-tabs .tab" nichts, die Handler des Clients blieben unverdrahtet -
+   * und der Test haette Gruen gemeldet, obwohl der Umschalter tot war.
+   */
+  const matches = (el, sel) => sel.split(',').some((part) => {
+    const chain = part.trim().split(/\s+/).filter(Boolean);
+    if (!chain.length || !simple(el, chain.pop())) return false;
+    let node = el.parentElement;
+    for (let i = chain.length - 1; i >= 0; i--) {
+      while (node && !simple(node, chain[i])) node = node.parentElement;
+      if (!node) return false;
+      node = node.parentElement;
+    }
+    return true;
+  });
 
   const root = new El('body');
   const doc = {
@@ -404,4 +430,75 @@ test('Flottenuebersicht haengt nicht im klebenden Bereich', async () => {
   // Und trotzdem gefuellt - der Umzug darf das Rendern nicht abhaengen.
   assert.equal(byId.get('fleet-foe').children.length, 5);
   assert.equal(byId.get('fleet-own').children.length, 5);
+});
+
+// ------------------------------------------------------ Feste Spielansicht
+test('Umschalter wechselt den Bereich, Bedienleiste bleibt (#22, #23)', async () => {
+  const { byId, doc, feed } = await bootClient();
+  feed(stateMsg());
+
+  const pane = (id) => byId.get(id)._classes.has('active');
+  assert.equal(pane('pane-foe'), true, 'startet beim Gegnerbrett');
+  assert.equal(pane('pane-own'), false);
+
+  const tab = (name) => doc.querySelectorAll('.tab').find((t) => t.dataset.pane === name);
+  tab('pane-own').onclick();
+  assert.equal(pane('pane-own'), true, 'eigene Flotte sichtbar');
+  assert.equal(pane('pane-foe'), false, 'immer nur einer');
+
+  tab('pane-log').onclick();
+  assert.equal(pane('pane-log'), true);
+
+  // Die Leiste haengt in keinem Bereich - sonst waere sie zeitweise weg.
+  const inPane = (el) => {
+    for (let p = el; p; p = p.parentElement) if (p._classes?.has('game-pane')) return true;
+    return false;
+  };
+  assert.equal(inPane(byId.get('btn-fire')), false, 'Feuern immer erreichbar');
+  assert.equal(inPane(byId.get('turn-banner')), false, 'Zugzeile immer sichtbar');
+});
+
+test('Eigener Zug holt das Gegnerbrett nach vorn', async () => {
+  const { byId, doc, feed } = await bootClient();
+  feed(stateMsg({ turn: 1, turnCount: 3 }));          // Gegner am Zug
+  doc.querySelectorAll('.tab').find((t) => t.dataset.pane === 'pane-log').onclick();
+  assert.equal(byId.get('pane-log')._classes.has('active'), true);
+
+  feed(stateMsg({ turn: 0, turnCount: 4 }));          // jetzt du
+  assert.equal(byId.get('pane-foe')._classes.has('active'), true,
+    'Umschalter springt zurueck - man soll nicht suchen muessen, wo geschossen wird');
+});
+
+test('Zugzeile schreibt in ihre Kinder, nicht in den Container (#10)', async () => {
+  const { byId, feed } = await bootClient();
+  feed(stateMsg());
+  // #turn-banner enthaelt vier benannte Kinder. Ein textContent auf den
+  // Container haette sie alle geloescht - genau die Falle aus Issue #10.
+  assert.match(byId.get('turn-text').textContent, /Du bist am Zug/);
+  for (const id of ['turn-text', 'salvo-count', 'clock', 'mode-pill']) {
+    assert.ok(byId.get(id), `${id} lebt noch`);
+  }
+});
+
+// ------------------------------------------------------------ Salven-Vorrat
+test('Vorrat: Anzeige und freie Schusszahl (#20, #24)', async () => {
+  const { byId, feed } = await bootClient();
+  feed(stateMsg({ salvoPool: true, salvosLeft: 5, shots: 4 }));
+  assert.match(byId.get('salvo-count').textContent, /0\/4 · Vorrat 5/);
+
+  // Ohne Vorrat gilt "genau N", mit Vorrat ist jede Zahl von 1 bis N erlaubt.
+  byId.get('foe-grid').children[12].onclick();
+  assert.equal(byId.get('btn-fire').disabled, false, 'ein Schuss reicht schon');
+  assert.equal(byId.get('btn-fire').textContent, 'Feuern');
+
+  byId.get('foe-grid').children[14].onclick();
+  assert.equal(byId.get('btn-fire').textContent, 'Salve feuern', 'ab zwei ist es eine Salve');
+});
+
+test('Ohne Vorrat bleibt es bei "genau N"', async () => {
+  const { byId, feed } = await bootClient();
+  feed(stateMsg({ salvoPool: false, shots: 4 }));
+  assert.match(byId.get('salvo-count').textContent, /^0\/4$/, 'kein Vorrat in der Anzeige');
+  byId.get('foe-grid').children[12].onclick();
+  assert.equal(byId.get('btn-fire').disabled, true, 'ein Schuss von vier genuegt nicht');
 });

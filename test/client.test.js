@@ -149,9 +149,25 @@ test('Kachelgröße ist an Breite UND Höhe gekoppelt', () => {
     'im Breitbild-Block wird --cs nicht überschrieben');
 });
 
-test('Sichere Bereiche und Leistenhöhe sind berücksichtigt', () => {
+test('Sichere Bereiche und Kopfzeilenhöhe sind berücksichtigt', () => {
   assert.match(css, /env\(safe-area-inset-bottom\)/, 'Safaris untere Leiste eingeplant');
-  assert.match(css, /var\(--controls-h/, 'Scrollraum richtet sich nach der gemessenen Leiste');
-  assert.match(app, /--controls-h/, 'und der Client misst sie auch');
-  assert.match(css, /#mode-pill:empty\{display:none\}/, 'leere Kapsel wird ausgeblendet');
+  // Die Spielansicht ist so hoch wie der Schirm minus Kopfzeile. Deren Hoehe
+  // wird gemessen, nicht geraten - sie haengt an Schriftgroesse und Umbruch.
+  assert.match(cssCode, /var\(--header-h/, 'Ansichtshöhe richtet sich nach der gemessenen Kopfzeile');
+  assert.match(app, /--header-h/, 'und der Client misst sie auch');
+  assert.ok(!/--controls-h/.test(cssCode), 'kein Rest der alten Klebe-Leiste im CSS');
+  assert.ok(!/--controls-h/.test(app), 'und keiner im Client');
+});
+
+test('Spielansicht steht hochkant fest und scrollt nicht (#22, #23)', () => {
+  const portrait = cssCode.slice(cssCode.indexOf('@media(max-width:779px)'));
+  assert.match(portrait, /#screen-game\.active\{[^}]*overflow:hidden/,
+    'die Ansicht selbst scrollt nicht');
+  assert.match(portrait, /100dvh/, 'sie ist genau schirmhoch');
+  assert.match(cssCode, /\.game-pane:not\(\.active\)\{display:none\}/,
+    'immer nur ein Bereich sichtbar');
+  // Die Leiste klebte und schob sich ueber die Reihen 9-10. Jetzt gibt es
+  // die Klasse gar nicht mehr - sie steht fest im Gitter.
+  assert.ok(!/\.controls\.sticky/.test(cssCode), 'nichts klebt mehr über dem Brett');
+  assert.ok(!/class="controls card sticky"/.test(html), 'auch nicht im Markup');
 });

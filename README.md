@@ -126,7 +126,7 @@ wieder in beiden Zielkorridoren (52,4 % / 40,2 %). Und er verlängert die Partie
 ## Tests
 
 ```bash
-npm test              # 96 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung, Playtest-Regressionen
+npm test              # 108 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung, Playtest-Regressionen
 npm run e2e           # vollständige Partie gegen den Bot über WebSocket
 npm run e2e:lobby     # zwei Clients, Lobby erstellen + beitreten
 npm run e2e:options   # Optionen, Zug-Timeout und Revanche

@@ -34,7 +34,13 @@ export const DEFAULT_OPTIONS = {
   scanEnabled: true,
   diveEnabled: true,
   maneuverEnabled: true,
-  turnSeconds: 60
+  turnSeconds: 60,
+  // Salven-Vorrat: begrenzt, wie OFT eine volle Salve geschossen werden darf,
+  // nicht wie gross sie ist. Jeder Zug ist eine Entscheidung – Salve kostet
+  // eine aus dem Vorrat, Einzelschuss kostet nichts. Ist er leer, geht nur
+  // noch Einzelschuss.
+  salvoPool: false,
+  salvoPoolSize: 8
 };
 
 export function mergeOptions(raw = {}) {
@@ -49,7 +55,8 @@ export function mergeOptions(raw = {}) {
   o.decoyCount = num(raw.decoyCount, 0, 4, o.decoyCount);
   o.decoyLen = num(raw.decoyLen, 1, 3, o.decoyLen);
   o.turnSeconds = num(raw.turnSeconds, 15, 300, o.turnSeconds);
-  for (const k of ['openingBalance', 'singleShotAfterHit', 'scanEnabled', 'diveEnabled', 'maneuverEnabled']) {
+  o.salvoPoolSize = num(raw.salvoPoolSize, 0, 30, o.salvoPoolSize);
+  for (const k of ['openingBalance', 'singleShotAfterHit', 'scanEnabled', 'diveEnabled', 'maneuverEnabled', 'salvoPool']) {
     if (raw[k] !== undefined) o[k] = !!raw[k];
   }
   return o;
@@ -156,7 +163,8 @@ export function makePlayer(name, placement, opts = {}) {
     divedThisTurn: false,
     scannedThisTurn: false,
     lastSalvoHit: false,     // fuer die Option "nach Treffer nur Einzelschuss"
-    scans: []                // {center, count} – fuer die Markierung im Client
+    scans: [],               // {center, count} – fuer die Markierung im Client
+    salvosLeft: (opts.options || DEFAULT_OPTIONS).salvoPoolSize
   };
 }
 
@@ -241,9 +249,28 @@ function unknownCount(p) {
   return n;
 }
 
-/** Wie viele Schüsse der Spieler jetzt abgeben MUSS. */
+/**
+ * Obergrenze der Schuesse in diesem Zug.
+ *
+ * Der Salven-Vorrat greift bewusst ERST HIER und nicht in baseSalvo(): sonst
+ * waeren mit leerem Vorrat auch Aufklaerung und Tauchen gesperrt, weil beide
+ * an baseSalvo >= 2 haengen. Der Vorrat soll die Salve begrenzen, nicht die
+ * uebrigen Faehigkeiten mit abraeumen.
+ */
+export function maxShots(game, slot) {
+  const o = game.options || DEFAULT_OPTIONS;
+  const p = game.players[slot];
+  const n = shotsAvailable(game, slot);
+  if (o.salvoPool && p.salvosLeft <= 0) return 1;
+  return n;
+}
+
+/**
+ * Wie viele Schüsse der Spieler abgeben muss – bzw. hoechstens darf, wenn der
+ * Salven-Vorrat laeuft. Dann ist jede Zahl von 1 bis hierhin erlaubt.
+ */
 export function requiredShots(game, slot) {
-  return Math.min(shotsAvailable(game, slot), unknownCount(game.players[slot]));
+  return Math.min(maxShots(game, slot), unknownCount(game.players[slot]));
 }
 
 export function beginTurn(game) {
@@ -350,8 +377,21 @@ export function applySalvo(game, slot, shots) {
   const p = game.players[slot];
   const foe = game.players[1 - slot];
 
+  const o = game.options || DEFAULT_OPTIONS;
   const need = requiredShots(game, slot);
-  if (!Array.isArray(shots) || shots.length !== need) {
+  if (!Array.isArray(shots)) return { ok: false, error: 'Keine Schüsse angesagt.' };
+
+  if (o.salvoPool) {
+    // Die Anzahl der gesendeten Schuesse IST die Entscheidung: mehr als einer
+    // heisst "ich gebe eine Salve aus dem Vorrat aus". Ein eigenes Feld im
+    // Protokoll braucht es dafuer nicht.
+    if (shots.length < 1 || shots.length > need) {
+      return { ok: false, error: `1 bis ${need} Schüsse ansagen.` };
+    }
+    if (shots.length > 1 && p.salvosLeft <= 0) {
+      return { ok: false, error: 'Salven aufgebraucht – nur noch Einzelschuss.' };
+    }
+  } else if (shots.length !== need) {
     return { ok: false, error: `Genau ${need} Schuss/Schüsse ansagen.` };
   }
   const seen = new Set();
@@ -361,6 +401,9 @@ export function applySalvo(game, slot, shots) {
     if (p.tracking[i] !== UNKNOWN) return { ok: false, error: 'Feld wurde bereits beschossen.' };
     seen.add(i);
   }
+
+  // Erst hier abziehen: eine abgewiesene Salve darf nichts kosten.
+  if (o.salvoPool && shots.length > 1) p.salvosLeft -= 1;
 
   const results = [];
   const waterCells = [];

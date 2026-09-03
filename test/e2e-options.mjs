@@ -22,11 +22,14 @@ ws.on('message', (raw) => {
   if (m.t === 'joined') {
     return send({
       t: 'setOptions',
-      options: { minSalvo: 2, maxSalvo: 4, singleShotAfterHit: true, turnSeconds: 15, decoyCount: 3, decoyLen: 2 }
+      options: { minSalvo: 2, maxSalvo: 4, singleShotAfterHit: true, turnSeconds: 15, decoyCount: 3, decoyLen: 2,
+                 salvoPool: true, salvoPoolSize: 2 }
     });
   }
 
   if (m.t === 'lobby' && phase === 'setup' && m.options.singleShotAfterHit) {
+    check(m.options.salvoPool === true, 'Salven-Vorrat übernommen');
+    check(m.options.salvoPoolSize === 2, 'Vorratsgröße übernommen');
     phase = 'placing';
     check(m.options.turnSeconds === 15, 'Zugzeit übernommen');
     check(m.options.decoyCount === 3, 'Köderzahl übernommen');

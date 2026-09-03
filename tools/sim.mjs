@@ -36,8 +36,11 @@ function mulberry32(a) {
 }
 
 // ------------------------------------------------------------- Kommandozeile
-const BOOL_KEYS = ['openingBalance', 'singleShotAfterHit', 'scanEnabled', 'diveEnabled', 'maneuverEnabled'];
-const NUM_KEYS = ['minSalvo', 'maxSalvo', 'decoyCount', 'decoyLen', 'turnSeconds'];
+// Aus DEFAULT_OPTIONS abgeleitet statt zweitgefuehrt: eine neue Lobby-Option
+// ist damit sofort simulierbar. Vorher standen die Namen hier von Hand, und
+// --salvoPool war nach dem Einbau prompt "unbekannt".
+const BOOL_KEYS = Object.keys(DEFAULT_OPTIONS).filter((k) => typeof DEFAULT_OPTIONS[k] === 'boolean');
+const NUM_KEYS = Object.keys(DEFAULT_OPTIONS).filter((k) => typeof DEFAULT_OPTIONS[k] === 'number');
 
 export function parseArgs(argv) {
   const raw = {};

@@ -75,7 +75,14 @@ function log(html) {
 function handle(m) {
   switch (m.t) {
     case 'welcome':
-      if (m.resumed) { mySlot = m.playerId; myCode = m.code; }
+      if (m.resumed) { mySlot = m.playerId; myCode = m.code; break; }
+      // Wer einen Lobby-Link oeffnet, will hinein - nicht den Code vorbefuellt
+      // bekommen und dann noch klicken muessen (Issue #15). Schlaegt es fehl,
+      // bleibt der Code im Feld stehen und die Fehlermeldung erscheint wie
+      // sonst auch; niemand landet in einer Sackgasse.
+      if (linkCode && !myCode) {
+        send({ t: 'joinLobby', code: linkCode, name: nameValue() });
+      }
       break;
 
     case 'joined':
@@ -141,7 +148,13 @@ function handle(m) {
       // aus, die der Server dann ablehnte (Issue #7).
       const turnChanged = !state || state.turn !== m.turn || state.turnCount !== m.turnCount;
       state = m; opts = m.options;
-      if (turnChanged) { mode = 'normal'; selected.clear(); manShip = null; $('maneuver-panel').classList.add('hidden'); }
+      if (turnChanged) {
+        mode = 'normal'; selected.clear(); manShip = null;
+        $('maneuver-panel').classList.add('hidden');
+        // Wird es dein Zug, gehoert das Gegnerbrett nach vorn - man soll nicht
+        // suchen muessen, wo geschossen wird.
+        if (m.turn === m.you && m.status === 'playing') showPane('pane-foe');
+      }
       renderGame();
       break;
     }
@@ -208,7 +221,15 @@ function applyOptionsToForm(o) {
   $('o-scan').checked = o.scanEnabled;
   $('o-dive').checked = o.diveEnabled;
   $('o-man').checked = o.maneuverEnabled;
+  $('o-pool').checked = o.salvoPool;
+  $('o-poolsize').value = o.salvoPoolSize;
 }
+
+// Der Vorrat verlaengert die Partie deutlich (Simulation: 39 -> 59 Zuege).
+// Beim Einschalten deshalb die Zugzeit auf 20 s vorschlagen - danach frei.
+$('o-pool').addEventListener('change', () => {
+  if ($('o-pool').checked && +$('o-time').value > 20) $('o-time').value = 20;
+});
 
 $('btn-opts').onclick = () => send({
   t: 'setOptions',
@@ -218,7 +239,8 @@ $('btn-opts').onclick = () => send({
     turnSeconds: +$('o-time').value,
     openingBalance: $('o-opening').checked, singleShotAfterHit: $('o-single').checked,
     scanEnabled: $('o-scan').checked, diveEnabled: $('o-dive').checked,
-    maneuverEnabled: $('o-man').checked
+    maneuverEnabled: $('o-man').checked,
+    salvoPool: $('o-pool').checked, salvoPoolSize: +$('o-poolsize').value
   }
 });
 
@@ -455,13 +477,22 @@ function renderGame() {
   $('foe-name').textContent = state.opponent.name;
   $('foe-ships').textContent = `${state.opponent.shipsLeft} Schiffe`;
   const mine = state.turn === state.you;
-  $('turn-banner').textContent = mine ? 'Du bist am Zug.' : `${state.opponent.name} ist am Zug…`;
+  // In #turn-banner darf kein textContent geschrieben werden: er enthaelt
+  // #turn-text, #salvo-count, #clock und #mode-pill. Ein Schreibzugriff auf den
+  // Container wuerde alle vier aus dem DOM loeschen (siehe docs/LEARNINGS.md).
+  $('turn-text').textContent = mine ? 'Du bist am Zug.' : `${state.opponent.name} ist am Zug…`;
   $('turn-banner').classList.toggle('you', mine);
-  $('shots-left').textContent = mine ? `${selected.size}/${state.shots}` : '–';
+  $('salvo-count').textContent = mine ? salvoLabel() : '';
   $('mode-pill').textContent = mode === 'scan' ? 'Scan-Ziel wählen' : (mode === 'maneuver' ? 'Manövermodus' : (state.diving ? 'U-Boot getaucht' : ''));
   deadline = state.deadline;
 
-  $('btn-fire').disabled = !mine || mode !== 'normal' || selected.size !== state.shots;
+  // Ohne Vorrat gilt "genau N". Mit Vorrat ist die Anzahl die Entscheidung:
+  // alles von 1 bis zum Maximum geht, mehr als einer kostet eine Salve.
+  const enough = state.salvoPool
+    ? (selected.size >= 1 && selected.size <= state.shots)
+    : selected.size === state.shots;
+  $('btn-fire').disabled = !mine || mode !== 'normal' || !enough;
+  $('btn-fire').textContent = state.salvoPool && selected.size > 1 ? 'Salve feuern' : 'Feuern';
   $('btn-scan').disabled = !mine || !state.canScan || mode === 'maneuver';
   $('btn-scan').title = state.canScan ? 'Ein Schuss der Salve wird zum 3×3-Scan' : (state.scanBlocked || '');
   $('scan-hint').textContent = mine && !state.canScan && state.scanBlocked ? state.scanBlocked : '';
@@ -488,6 +519,13 @@ function renderGame() {
  * Der Server liefert dafuer schon alles: sunkEnemy sind die versenkten
  * Gegnertypen, own.ships den eigenen Zustand.
  */
+/** Was in der Zugzeile steht: gewaehlt/Maximum, bei Vorrat plus Restbestand. */
+function salvoLabel() {
+  const base = `${selected.size}/${state.shots}`;
+  if (!state.salvoPool) return base;
+  return `${base} · Vorrat ${state.salvosLeft}`;
+}
+
 function renderFleetLegend() {
   const row = (sym, label, len, cls, note) => {
     const li = document.createElement('li');
@@ -582,7 +620,8 @@ function renderEnd() {
 
 // ------------------------------------------------------------- Eingaben
 $('name').value = localStorage.getItem('nebel.name') || '';
-if (location.hash.length === 5) $('code').value = location.hash.slice(1).toUpperCase();
+const linkCode = location.hash.length === 5 ? location.hash.slice(1).toUpperCase() : null;
+if (linkCode) $('code').value = linkCode;
 
 $('btn-create').onclick = () => send({ t: 'createLobby', name: nameValue() });
 $('btn-bot').onclick = () => send({ t: 'startVsBot', name: nameValue() });
@@ -713,16 +752,27 @@ $('feedback-form').addEventListener('submit', async (ev) => {
   }
 });
 
-// ------------------------------------------------- Hoehe der Bedienleiste
-// Die Leiste klebt hochkant unten. Damit sie nichts dauerhaft verdeckt, braucht
-// die Seite darunter genau so viel Luft, wie die Leiste hoch ist. Fest
-// verdrahtet waere das eine Magiezahl, die bei jedem neuen Knopf falsch wird -
-// deshalb gemessen. Faellt die Messung aus, traegt der Standardwert im calc().
-(function trackControlsHeight() {
-  const bar = document.querySelector('.controls');
-  if (!bar || typeof ResizeObserver !== 'function') return;
-  const apply = () => document.documentElement.style.setProperty('--controls-h', `${bar.offsetHeight}px`);
-  new ResizeObserver(apply).observe(bar);
+// ------------------------------------------------------------- Umschalter
+// Hochkant ist die Spielansicht fest: es scrollt nichts, und ein Bereich ist
+// sichtbar. Quer blendet das CSS den Umschalter aus und zeigt alles.
+function showPane(id) {
+  for (const p of document.querySelectorAll('.game-pane')) p.classList.toggle('active', p.id === id);
+  for (const t of document.querySelectorAll('.game-tabs .tab')) t.classList.toggle('active', t.dataset.pane === id);
+}
+for (const t of document.querySelectorAll('.game-tabs .tab')) {
+  t.onclick = () => showPane(t.dataset.pane);
+}
+
+// -------------------------------------------------- Hoehe der Kopfzeile
+// Die Spielansicht ist hochkant genau so hoch wie der Schirm minus Kopfzeile.
+// Deren Hoehe haengt an der Schriftgroesse und daran, ob der Programmstand
+// umbricht - fest verdrahtet waere sie irgendwann falsch, und dann ragt die
+// Ansicht unten heraus. Faellt die Messung aus, traegt der Wert im calc().
+(function trackHeaderHeight() {
+  const head = document.querySelector('header');
+  if (!head || typeof ResizeObserver !== 'function') return;
+  const apply = () => document.documentElement.style.setProperty('--header-h', `${head.offsetHeight}px`);
+  new ResizeObserver(apply).observe(head);
   apply();
 })();
 

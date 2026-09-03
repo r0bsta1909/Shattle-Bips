@@ -72,6 +72,8 @@
       <label class="chk"><input type="checkbox" id="o-scan" checked> Aufklärung erlauben</label>
       <label class="chk"><input type="checkbox" id="o-dive" checked> Tauchen erlauben</label>
       <label class="chk"><input type="checkbox" id="o-man" checked> Manöver erlauben</label>
+      <label class="chk"><input type="checkbox" id="o-pool"> Salven-Vorrat: begrenzte Anzahl voller Salven, danach nur Einzelschuss</label>
+      <label>Salven im Vorrat <input type="number" id="o-poolsize" min="0" max="30" value="8"></label>
     </div>
     <button id="btn-opts" class="wide-btn">Einstellungen übernehmen</button>
     <p class="hint">Änderungen setzen die Aufstellungen zurück. Nur der Host kann einstellen.</p>
@@ -103,19 +105,57 @@
 
 <!-- ------------------------------------------------------ Partie -->
 <section id="screen-game" class="screen">
-  <div class="board-col">
-    <h3>Gegner: <span id="foe-name">—</span> <span id="foe-ships" class="pill"></span></h3>
-    <div id="foe-grid" class="grid foe"></div>
+
+  <!-- Umschalter: hochkant passen Gegnerraster, Bedienleiste UND eigenes
+       Raster nie gleichzeitig auf den Schirm. Statt zu scrollen und dabei das
+       Brett zu verlieren (#22, #23), zeigt die Ansicht eines davon. -->
+  <div class="game-tabs" id="game-tabs" role="tablist">
+    <button class="tab active" data-pane="pane-foe" role="tab">Gegner</button>
+    <button class="tab" data-pane="pane-own" role="tab">Meine Flotte</button>
+    <button class="tab" data-pane="pane-log" role="tab">Funk</button>
   </div>
 
-  <div class="controls card sticky">
-    <div id="turn-banner" class="banner">…</div>
-    <div class="row">
-      <span class="pill">Salve <b id="shots-left">–</b></span>
-      <span class="pill">Zeit <b id="clock">–</b></span>
-      <span class="pill" id="mode-pill"></span>
+  <div class="game-pane active" id="pane-foe">
+    <div class="board-col">
+      <h3>Gegner: <span id="foe-name">—</span> <span id="foe-ships" class="pill"></span></h3>
+      <div id="foe-grid" class="grid foe"></div>
     </div>
-    <div class="row">
+  </div>
+
+  <div class="game-pane" id="pane-own">
+    <div class="board-col">
+      <h3>Deine Flotte</h3>
+      <div id="own-grid" class="grid own"></div>
+    </div>
+    <div class="info card">
+      <div class="fleet-cols">
+        <div><h4>Gegner</h4><ul id="fleet-foe" class="fleet-list"></ul></div>
+        <div><h4>Deine Flotte</h4><ul id="fleet-own" class="fleet-list"></ul></div>
+      </div>
+      <p class="hint">Aufstellung: nichts berührt sich, auch nicht diagonal &ndash; ein Feld Abstand rundum.
+        Köder sind so lang wie der Zerstörer und werden nie versenkt.</p>
+    </div>
+  </div>
+
+  <div class="game-pane" id="pane-log">
+    <div class="card log-card">
+      <h3>Funkverkehr</h3>
+      <ul id="log" class="log"></ul>
+    </div>
+  </div>
+
+  <!-- Steht ausserhalb der Bereiche und ist damit immer sichtbar, egal was
+       der Umschalter zeigt. -->
+  <div class="controls card">
+    <div id="turn-banner" class="banner">
+      <span id="turn-text">…</span>
+      <span class="banner-stats">
+        <span id="salvo-count">–</span>
+        <span id="clock">–</span>
+        <span id="mode-pill"></span>
+      </span>
+    </div>
+    <div class="row actions">
       <button id="btn-fire" class="primary" disabled>Feuern</button>
       <button id="btn-scan" disabled>Aufklären</button>
       <button id="btn-dive" disabled>Tauchen</button>
@@ -135,27 +175,6 @@
       <button id="btn-maneuver-cancel">Abbrechen</button>
     </div>
     <p id="game-error" class="error"></p>
-  </div>
-
-  <!-- Nachschlagen, keine Aktion: gehört deshalb nicht in den klebenden
-       Bereich, sonst verdeckt der hochkant das halbe Spielfeld. -->
-  <div class="info card">
-    <div class="fleet-cols">
-      <div><h4>Gegner</h4><ul id="fleet-foe" class="fleet-list"></ul></div>
-      <div><h4>Deine Flotte</h4><ul id="fleet-own" class="fleet-list"></ul></div>
-    </div>
-    <p class="hint">Aufstellung: nichts berührt sich, auch nicht diagonal &ndash; ein Feld Abstand rundum.
-      Köder sind so lang wie der Zerstörer und werden nie versenkt.</p>
-  </div>
-
-  <div class="board-col">
-    <h3>Deine Flotte</h3>
-    <div id="own-grid" class="grid own"></div>
-  </div>
-
-  <div class="card log-card">
-    <h3>Funkverkehr</h3>
-    <ul id="log" class="log"></ul>
   </div>
 </section>
 

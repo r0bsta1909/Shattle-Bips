@@ -205,9 +205,34 @@ export function planTurn(brain, game, slot) {
   return plan;
 }
 
+/**
+ * Laeuft der Salven-Vorrat, ist die Schusszahl eine Entscheidung.
+ * Der Bot hebt sich Salven fuer die Jagd auf: sobald ein Treffer offene
+ * Nachbarfelder hat, lohnt die Breite. Ohne diese Bremse verbraet er alle
+ * Salven in den ersten Zuegen der blinden Suche.
+ * Zusatzregel gegen Horten: sind noch viele Salven fuer wenige offene Felder
+ * da, wird grosszuegig geschossen.
+ */
+function wantsSalvo(game, slot, max) {
+  const o = game.options || DEFAULT_OPTIONS;
+  const me = game.players[slot];
+  if (!o.salvoPool || max <= 1) return true;
+  if (me.salvosLeft <= 0) return false;
+
+  const hunting = me.tracking.some(
+    (v, i) => v === HIT && orth(i).some((j) => me.tracking[j] === UNKNOWN)
+  );
+  if (hunting) return true;
+
+  let unknown = 0;
+  for (const v of me.tracking) if (v === UNKNOWN) unknown++;
+  return me.salvosLeft * max >= unknown * 0.5;
+}
+
 export function planShots(brain, game, slot) {
   const me = game.players[slot];
-  const n = requiredShots(game, slot);
+  const max = requiredShots(game, slot);
+  const n = wantsSalvo(game, slot, max) ? max : 1;
   const shots = pickCells(brain, me.tracking, me.sunkEnemy, n);
   brain.lastShots = shots.slice();
   return shots;

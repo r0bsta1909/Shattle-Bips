@@ -261,3 +261,56 @@ test('Scan-Historie wird für die Markierung im Client gespeichert', () => {
   assert.equal(g.players[1].scans.length, 1);
   assert.equal(g.players[1].scans[0].count, r.count);
 });
+
+// ------------------------------------------------------------ Salven-Vorrat
+test('Vorrat: Einzelschuss kostet nichts, Salve zieht ab', () => {
+  const g = mkOpt({ salvoPool: true, salvoPoolSize: 2, openingBalance: false });
+  assert.equal(g.players[0].salvosLeft, 2);
+
+  applySalvo(g, 0, [ix(5, 5)]);                       // Einzelschuss
+  assert.equal(g.players[0].salvosLeft, 2, 'Einzelschuss ist frei');
+
+  applySalvo(g, 1, [ix(5, 0), ix(5, 1), ix(5, 2), ix(5, 3)]);
+  assert.equal(g.players[1].salvosLeft, 1, 'Salve kostet eine');
+});
+
+test('Vorrat: bei 0 ist nur noch Einzelschuss erlaubt', () => {
+  const g = mkOpt({ salvoPool: true, salvoPoolSize: 0, openingBalance: false });
+  assert.equal(requiredShots(g, 0), 1, 'Obergrenze faellt auf 1');
+
+  const r = applySalvo(g, 0, [ix(5, 5), ix(5, 6)]);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /1 bis 1/);
+  assert.equal(applySalvo(g, 0, [ix(5, 5)]).ok, true, 'einer geht');
+});
+
+test('Vorrat: jede Zahl von 1 bis zum Maximum ist erlaubt', () => {
+  const g = mkOpt({ salvoPool: true, salvoPoolSize: 5, openingBalance: false });
+  assert.equal(requiredShots(g, 0), 4);
+  // Ohne Vorrat waeren nur exakt 4 erlaubt – die Zahl IST die Entscheidung.
+  assert.equal(applySalvo(g, 0, [ix(0, 5), ix(0, 7)]).ok, true, '2 von 4 gehen');
+  assert.equal(g.players[0].salvosLeft, 4);
+});
+
+test('Vorrat: abgewiesene Salve kostet nichts', () => {
+  const g = mkOpt({ salvoPool: true, salvoPoolSize: 3, openingBalance: false });
+  const r = applySalvo(g, 0, [ix(5, 5), ix(5, 5)]);   // doppeltes Feld
+  assert.equal(r.ok, false);
+  assert.equal(g.players[0].salvosLeft, 3, 'Vorrat unangetastet');
+});
+
+test('Vorrat sperrt Aufklärung und Tauchen nicht', () => {
+  // Der Vorrat greift erst in maxShots, nicht in baseSalvo. Sonst waeren mit
+  // leerem Vorrat auch Scan und Tauchen weg, weil beide an baseSalvo >= 2
+  // haengen – das hat niemand verlangt.
+  const g = mkOpt({ salvoPool: true, salvoPoolSize: 0, openingBalance: false });
+  assert.equal(baseSalvo(g, 0), 4, 'Salvengröße bleibt unberührt');
+  assert.equal(applyScan(g, 0, ix(5, 5)).ok, true, 'Aufklärung geht weiter');
+});
+
+test('Vorrat: Optionen werden geklammert', () => {
+  assert.equal(mergeOptions({ salvoPoolSize: 999 }).salvoPoolSize, 30);
+  assert.equal(mergeOptions({ salvoPoolSize: -5 }).salvoPoolSize, 0);
+  assert.equal(mergeOptions({ salvoPool: 1 }).salvoPool, true);
+  assert.equal(mergeOptions({}).salvoPool, false, 'standardmäßig aus');
+});
