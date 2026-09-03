@@ -6,6 +6,11 @@ Möglichkeit, statt zu feuern die eigene Flotte zu verschieben.
 
 Online-Duell im Browser oder gegen den Bot. Kein Build-Schritt, kein Framework, keine Datenbank.
 
+**Am Code arbeiten?** [CLAUDE.md](CLAUDE.md) ist der Einstieg (Landkarte, Befehle, Testschichten),
+[docs/LEARNINGS.md](docs/LEARNINGS.md) sammelt die Fallen, [docs/SESSIONS.md](docs/SESSIONS.md)
+ist das Logbuch mit dem letzten Stand und den offenen Punkten. Diese README beschreibt das
+**Spiel**, nicht die Entwicklung.
+
 ---
 
 ## Warum das Ganze
