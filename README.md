@@ -121,7 +121,7 @@ wieder in beiden Zielkorridoren (52,4 % / 40,2 %). Und er verlängert die Partie
 ## Tests
 
 ```bash
-npm test              # 56 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung
+npm test              # 57 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung
 npm run e2e           # vollständige Partie gegen den Bot über WebSocket
 npm run e2e:lobby     # zwei Clients, Lobby erstellen + beitreten
 npm run e2e:options   # Optionen, Zug-Timeout und Revanche
@@ -248,7 +248,7 @@ eine Zeile im Log. Mögliche `reason`-Werte:
 | `no-token` | `GITHUB_TOKEN` ist nicht gesetzt |
 | `no-repo` | weder `FEEDBACK_REPO` noch `RENDER_GIT_REPO_SLUG` gesetzt |
 | `auth` | GitHub lehnt den Token ab (401) — abgelaufen, widerrufen, oder mit Anführungszeichen eingefügt |
-| `forbidden` | Token darf nicht auf das Repo (403) — fehlt „Issues: Read and write"? |
+| `forbidden` | 403. Steht dabei `"reads": true`, darf der Token lesen aber nicht schreiben — er hat „Issues: **Read-only**" statt „Read and write" |
 | `not-found` | Repo für diesen Token nicht sichtbar (404) — Pfad falsch oder Repo nicht im Token ausgewählt |
 | `issues-disabled` | Issues sind im Repo abgeschaltet |
 | `github-down` | GitHub antwortet mit 5xx — vorübergehend, nichts zu tun |

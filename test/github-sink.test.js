@@ -205,3 +205,32 @@ test('Letzter Fehlschlag wird fuer die Diagnose gemerkt', async () => {
     assert.match(s.lastError.detail, /GitHub 401/);
   });
 });
+
+test('Diagnose meldet nicht "ok", wenn der letzte Schreibversuch abgelehnt wurde', async () => {
+  // Leseproben gehen durch, das Anlegen scheitert mit 403 – genau der Fall
+  // "Issues: Read-only". Ohne den Vorrang des echten Schreibversuchs haette
+  // die Diagnose hier faelschlich "ok" gemeldet.
+  const routes = {
+    '/repos/u/r/issues': { status: 200, body: [] },
+    '/repos/u/r': { status: 200, body: { has_issues: true } }
+  };
+  await withRoutedGithub(routes, async () => {
+    resetLimits();
+    assert.equal((await diagnose()).ok, true, 'ohne Vorgeschichte sieht alles gut aus');
+    assert.equal((await diagnose()).writeUnproven, true, 'Schreibrecht bleibt unbewiesen');
+  });
+
+  await withFakeGithub({ status: 403, body: { message: 'Resource not accessible by personal access token' } }, async () => {
+    resetLimits();
+    await submitFeedback({ text: 'Der echte Schreibversuch', ip: '8.8.8.8' });
+  });
+
+  await withRoutedGithub(routes, async () => {
+    const d = await diagnose();
+    assert.equal(d.ok, false, 'der gescheiterte Schreibversuch schlaegt die Leseprobe');
+    assert.equal(d.reason, 'forbidden');
+    assert.equal(d.reads, true, 'Lesen geht weiterhin');
+    assert.match(explain(d), /Read-only/, 'Klartext benennt die Ursache');
+  });
+  resetLimits();
+});

@@ -121,6 +121,8 @@ function sinkName() {
 }
 
 const CONFIG_HINT = 'Feedback ist auf diesem Server nicht richtig eingerichtet.';
+/** Ursachen, die eine Einrichtung verlangen – keine voruebergehenden Stoerungen. */
+const CONFIG_REASONS = new Set(['no-token', 'no-repo', 'no-webhook', 'auth', 'forbidden', 'not-found', 'rejected', 'issues-disabled']);
 const TRANSIENT_HINT = 'GitHub antwortet gerade nicht. Bitte später noch einmal.';
 
 export function githubTarget() {
@@ -204,16 +206,32 @@ export async function diagnose() {
     const info = await meta.json().catch(() => ({}));
     if (info.has_issues === false) return { sink, ok: false, repo, reason: 'issues-disabled' };
 
-    // Repo lesbar heisst noch nicht, dass der Token Issues schreiben darf.
-    // Ein fein granulierter Token vergibt Lesen und Schreiben gemeinsam,
-    // deshalb ist der Lesezugriff auf Issues ein brauchbarer Stellvertreter.
     const issues = await fetch(`${api}/repos/${repo}/issues?per_page=1`, {
       headers: ghHeaders(token),
       signal: AbortSignal.timeout(8000)
     });
     if (!issues.ok) return { sink, ok: false, repo, status: issues.status, ...classify(issues.status) };
 
-    return { sink, ok: true, reason: 'ok', repo, private: !!info.private };
+    // Ab hier ist bewiesen: Token gueltig, Repo sichtbar, Issues lesbar.
+    //
+    // Nicht bewiesen ist das Schreibrecht. Ein fein granulierter Token kann
+    // "Issues: Read-only" haben - dann geht jede Leseprobe durch und erst das
+    // Anlegen scheitert mit 403. Eine Vorabpruefung ohne Schreibzugriff gibt es
+    // dafuer nicht: GitHub kennt keinen Trockenlauf fuer POST /issues.
+    //
+    // Deshalb zaehlt hier der letzte echte Schreibversuch mehr als die Leseprobe.
+    // Ohne diesen Vorrang meldete die Diagnose "ok", waehrend der Knopf im
+    // Browser weiter scheiterte - genau der Fall, der sie ueberfluessig macht.
+    if (lastError && CONFIG_REASONS.has(lastError.reason)) {
+      return {
+        sink, ok: false, repo,
+        reason: lastError.reason,
+        reads: true,               // Lesen geht, nur das Schreiben nicht
+        since: lastError.at
+      };
+    }
+
+    return { sink, ok: true, reason: 'ok', repo, private: !!info.private, writeUnproven: true };
   } catch (err) {
     return { sink, ok: false, repo, reason: 'unreachable', detail: String(err && err.message || err) };
   }
@@ -222,11 +240,14 @@ export async function diagnose() {
 /** Klartext fuer das Serverlog beim Start. */
 export function explain(d) {
   switch (d.reason) {
-    case 'ok': return `Feedback-Senke ${d.sink} einsatzbereit${d.repo ? ` (${d.repo}${d.private ? ', privat' : ''})` : ''}.`;
+    case 'ok': return `Feedback-Senke ${d.sink} einsatzbereit${d.repo ? ` (${d.repo}${d.private ? ', privat' : ''})` : ''}.`
+      + (d.writeUnproven ? ' Lesen ist geprueft; ob der Token Issues anlegen darf, zeigt erst die erste Meldung.' : '');
     case 'no-token': return 'Feedback-Senke github gewaehlt, aber GITHUB_TOKEN ist nicht gesetzt.';
     case 'no-repo': return 'Feedback-Senke github gewaehlt, aber weder FEEDBACK_REPO noch RENDER_GIT_REPO_SLUG ist gesetzt.';
     case 'auth': return `GITHUB_TOKEN wird von GitHub abgelehnt (401). Token abgelaufen, widerrufen oder mit Leerzeichen/Anfuehrungszeichen eingefuegt?`;
-    case 'forbidden': return `GITHUB_TOKEN darf auf ${d.repo} nicht zugreifen (403). Fehlt dem Token das Recht "Issues: Read and write"?`;
+    case 'forbidden': return d.reads
+      ? `Der Token darf ${d.repo} lesen, aber keine Issues anlegen (403). Er steht auf "Issues: Read-only" – gebraucht wird "Read and write".`
+      : `GITHUB_TOKEN darf auf ${d.repo} nicht zugreifen (403). Fehlt dem Token das Recht "Issues: Read and write"?`;
     case 'not-found': return `${d.repo} ist fuer diesen Token nicht sichtbar (404). Stimmt der Repo-Pfad, und ist das Repo in der Tokenkonfiguration ausgewaehlt?`;
     case 'issues-disabled': return `Issues sind fuer ${d.repo} abgeschaltet.`;
     case 'unreachable': return `GitHub ist vom Server aus nicht erreichbar: ${d.detail}`;

@@ -79,7 +79,9 @@ app.get('/api/feedback/status', async (req, res) => {
   const admin = process.env.FEEDBACK_ADMIN_TOKEN
     && req.get('x-admin-token') === process.env.FEEDBACK_ADMIN_TOKEN;
 
-  if (!admin) return res.json({ sink: d.sink, ok: d.ok, reason: d.reason });
+  // Oeffentlich nur Kategorien, nie Inhalte: der Ursachen-Slug reicht zur
+  // Selbsthilfe und verraet weder Token noch GitHub-Rohantwort.
+  if (!admin) return res.json({ sink: d.sink, ok: d.ok, reason: d.reason, reads: d.reads ?? null });
 
   // Bewusst Feld fuer Feld statt Spread: feedbackStatus() fuehrt selbst ein
   // "version" (den Labelstring) und wuerde das Versionsobjekt still ueberschreiben.
