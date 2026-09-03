@@ -9,7 +9,7 @@ import { WebSocketServer } from 'ws';
 import {
   createRoom, getRoom, joinRoom, rebind, pushLobby, pushState,
   setPlacement, tryStart, doSalvo, doManeuver, doDive, doScan,
-  sweep, roomCount, randomPlacementForClient, lobbyState, setOptions, voteRematch, withdrawPlacement
+  sweep, roomCount, randomPlacementForClient, lobbyState, setOptions, voteRematch, withdrawPlacement, declineRematch, markDisconnected
 } from './rooms.js';
 import { VERSION } from './version.js';
 import { submitFeedback, sweepLimits, feedbackStatus, readMemory, diagnose, explain } from './feedback.js';
@@ -189,6 +189,13 @@ wss.on('connection', (ws) => {
           return;
         }
 
+        case 'rematchDecline': {
+          if (!ctx.room) return fail(ws, 'Keine Lobby.');
+          const r = declineRematch(ctx.room, ctx.slot);
+          if (!r.ok) return fail(ws, r.error);
+          return;
+        }
+
         case 'withdrawPlacement': {
           if (!ctx.room) return fail(ws, 'Keine Lobby.');
           const r = withdrawPlacement(ctx.room, ctx.slot);
@@ -249,7 +256,9 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     if (ctx.room && ctx.slot >= 0 && ctx.room.slots[ctx.slot]) {
-      ctx.room.slots[ctx.slot].connected = false;
+      // Nimmt auch die Revanche-Stimme zurueck – sonst genuegt spaeter die
+      // Stimme des Verbliebenen und er startet allein (Issue #14).
+      markDisconnected(ctx.room, ctx.slot);
       pushLobby(ctx.room);
       pushState(ctx.room);
     }

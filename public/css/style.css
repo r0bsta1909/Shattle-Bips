@@ -126,3 +126,15 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 /* Aufstellung liegt beim Server: sichtbar gesperrt, damit niemand weiterschiebt
    und der Client hinterher eine andere Flotte zeigt als der Server kennt. */
 .grid.locked{opacity:.6;pointer-events:none;filter:saturate(.6)}
+
+/* Eigenes Brett: Schiff, Wasser und gegnerischer Fehlschuss waren drei
+   aehnliche Blautoene und kaum zu trennen (Issue #11). Jetzt traegt jeder
+   Zustand zusaetzlich eine Form - Farbe allein reicht auch fuer Farbsehschwaeche
+   nicht. */
+.grid.own .cell.ship{background:var(--ship);box-shadow:inset 0 0 0 2px #7ba9c0}
+.grid.own .cell.miss{background:#0b2130;box-shadow:inset 0 0 0 1px #2a5670}
+.grid.own .cell.miss::after{content:"";width:26%;height:26%;border-radius:50%;
+  background:var(--muted);opacity:.85}
+.grid.own .cell.hit::after{content:"¹5";font-size:calc(var(--cs) * .5);color:#ffd9d1;line-height:1}
+.grid.own .cell.sunk::after{content:"¹5";font-size:calc(var(--cs) * .5);color:#ffb3a6;line-height:1}
+.grid.own .cell.decoy{background:var(--decoy);box-shadow:inset 0 0 0 2px #8a7550}

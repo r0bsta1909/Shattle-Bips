@@ -44,6 +44,13 @@ function show(id) {
   window.scrollTo(0, 0);
 }
 
+/** Wer ist mit diesem Platz gemeint? Aus Sicht des Lesers. (Issue #12) */
+function who(slot) {
+  if (!state || slot === undefined || slot === null) return 'Jemand';
+  return slot === state.you ? 'Du' : (state.opponent?.name ?? 'Der Gegner');
+}
+const foeName = () => state?.opponent?.name ?? 'Der Gegner';
+
 function log(html) {
   const li = document.createElement('li');
   li.innerHTML = html;
@@ -108,6 +115,7 @@ function handle(m) {
       break;
 
     case 'rematch':
+      closeRematchAsk();
       $('rematch-hint').textContent = '';
       show.pendingPlacement = true;
       show('screen-lobby');
@@ -126,22 +134,26 @@ function handle(m) {
 
     case 'salvoResult':
       for (const r of m.results) {
-        if (r.result === 'water') log(`${coord(r.cell)}: Wasser.`);
-        else if (r.result === 'hit') log(`${coord(r.cell)}: <b>Treffer.</b>`);
-        else log(`${coord(r.cell)}: <b>${r.shipLabel} versenkt!</b>`);
+        if (r.result === 'water') log(`<i>Du</i> → ${coord(r.cell)}: Wasser.`);
+        else if (r.result === 'hit') log(`<i>Du</i> → ${coord(r.cell)}: <b>Treffer.</b>`);
+        else log(`<i>Du</i> → ${coord(r.cell)}: <b>${r.shipLabel} versenkt!</b>`);
       }
       break;
 
     case 'scanResult':
-      log(`Aufklärung um <b>${coord(m.center)}</b>: <b>${m.count}</b> belegte Felder im 3×3-Feld.`);
+      log(`<i>Du</i> → Aufklärung um <b>${coord(m.center)}</b>: <b>${m.count}</b> belegte Felder im 3×3-Feld.`);
       break;
 
     case 'notice':
-      if (m.kind === 'maneuvered') log('Gegnermeldung: <b>Flotte manövriert.</b>');
-      if (m.kind === 'evaded') log('<b>U-Boot ausgewichen.</b> Die Wasser-Meldungen dieser Salve sind zurückgesetzt.');
-      if (m.kind === 'incoming') log(`Beschuss auf ${m.cells.map(coord).join(', ')}.`);
-      if (m.kind === 'timeout') log('Zug verfallen – Zeit abgelaufen.');
-      if (m.kind === 'rematchWanted') $('rematch-hint').textContent = `${m.by} will die Revanche.`;
+      // Jede Zeile nennt jetzt den Urheber – vorher stand da nur die Tatsache
+      // und man wusste nicht, wen sie betrifft (Issue #12).
+      if (m.kind === 'maneuvered') log(`<i>${foeName()}</i> → <b>Flotte manövriert.</b>`);
+      if (m.kind === 'evaded') log(`<i>${foeName()}</i> → <b>U-Boot ausgewichen.</b> Deine Wasser-Meldungen dieser Salve sind zurückgesetzt.`);
+      if (m.kind === 'incoming') log(`<i>${foeName()}</i> → Beschuss auf ${m.cells.map(coord).join(', ')}.`);
+      if (m.kind === 'timeout') log(`<i>${who(m.slot)}</i> → Zug verfallen, Zeit abgelaufen.`);
+      if (m.kind === 'rematchDeclined') { closeRematchAsk(); $('rematch-hint').textContent = `${m.by} hat die Revanche abgelehnt.`; }
+      if (m.kind === 'rematchOff') { closeRematchAsk(); $('rematch-hint').textContent = `${m.by} hat die Partie verlassen.`; }
+      if (m.kind === 'rematchWanted') openRematchAsk(m.by);
       if (m.kind === 'optionsChanged') {
         // Der Host hat die Regeln geaendert – der Server hat beide Aufstellungen
         // verworfen. Ohne diesen Zweig legte man unter alten Regeln fertig und
@@ -518,7 +530,19 @@ for (const b of document.querySelectorAll('#maneuver-panel button[data-move]')) 
   };
 }
 
-$('btn-rematch').onclick = () => { $('rematch-hint').textContent = 'Revanche angefragt…'; send({ t: 'rematch' }); };
+// Die Anfrage stand vorher nur als kleine Zeile unter den Knoepfen und wurde
+// leicht uebersehen. Jetzt ein Dialog, der eine Entscheidung verlangt (#13).
+const rematchDialog = $('rematch-dialog');
+function openRematchAsk(byName) {
+  $('rematch-who').textContent = `${byName} fordert eine Revanche.`;
+  if (!rematchDialog.open) rematchDialog.showModal();
+}
+function closeRematchAsk() { if (rematchDialog.open) rematchDialog.close(); }
+
+$('rematch-accept').onclick = () => { closeRematchAsk(); $('rematch-hint').textContent = 'Revanche angenommen…'; send({ t: 'rematch' }); };
+$('rematch-decline').onclick = () => { closeRematchAsk(); $('rematch-hint').textContent = 'Revanche abgelehnt.'; send({ t: 'rematchDecline' }); };
+
+$('btn-rematch').onclick = () => { $('rematch-hint').textContent = 'Revanche angefragt – warte auf den Gegner…'; send({ t: 'rematch' }); };
 $('btn-lobby').onclick = () => { show.pendingPlacement = false; show('screen-lobby'); };
 $('btn-quit').onclick = () => { localStorage.removeItem('nebel.token'); localStorage.removeItem('nebel.code'); location.href = location.origin; };
 

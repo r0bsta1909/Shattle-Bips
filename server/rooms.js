@@ -412,9 +412,18 @@ export function randomPlacementForClient(room) {
 /** Revanche: gleiche Lobby, gleiche Gegner, neue Aufstellung. */
 export function voteRematch(room, slotIndex) {
   if (room.status !== 'finished') return { ok: false, error: 'Partie läuft noch.' };
+
+  // Nur verbundene Menschen zaehlen. Vorher wurden die Plaetze gezaehlt: hatte
+  // der Gegner das Fenster geschlossen, galt seine alte Stimme weiter, die
+  // Revanche startete - und der Annehmende sass allein in der Lobby (Issue #14).
+  const humans = room.slots.filter((s) => s && !s.isBot);
+  const present = humans.filter((s) => s.connected);
+  if (present.length < humans.length) {
+    return { ok: false, error: 'Der Gegner ist nicht mehr verbunden. Keine Revanche möglich.' };
+  }
+
   room.rematchVotes.add(slotIndex);
-  const humans = room.slots.filter((s) => s && !s.isBot).length;
-  if (room.rematchVotes.size < humans) {
+  if (room.rematchVotes.size < present.length) {
     broadcast(room, { t: 'notice', kind: 'rematchWanted', by: room.slots[slotIndex].name });
     return { ok: true, waiting: true };
   }
@@ -433,6 +442,31 @@ export function voteRematch(room, slotIndex) {
   broadcast(room, { t: 'rematch' });
   pushLobby(room);
   return { ok: true, waiting: false };
+}
+
+/** Revanche ablehnen: Stimmen verwerfen und den Anfragenden informieren. */
+export function declineRematch(room, slotIndex) {
+  if (room.status !== 'finished') return { ok: false, error: 'Partie läuft noch.' };
+  room.rematchVotes.clear();
+  broadcast(room, { t: 'notice', kind: 'rematchDeclined', by: room.slots[slotIndex]?.name ?? '—' });
+  return { ok: true };
+}
+
+/**
+ * Verbindung eines Platzes ist weg. Seine Revanche-Stimme muss mit, sonst
+ * genuegt spaeter die Stimme des Verbliebenen und er startet allein.
+ */
+export function markDisconnected(room, slotIndex) {
+  const slot = room.slots[slotIndex];
+  if (!slot) return;
+  slot.connected = false;
+  room.rematchVotes.delete(slotIndex);
+  // Nach Partieende wartet der Verbliebene sonst auf eine Revanche, die nie
+  // kommen kann. Die Meldung geht raus, egal ob der Weggegangene schon
+  // abgestimmt hatte – wichtig ist, dass das Warten aufhoert.
+  if (room.status === 'finished' && !slot.isBot) {
+    broadcast(room, { t: 'notice', kind: 'rematchOff', by: slot.name });
+  }
 }
 
 export function roomCount() { return rooms.size; }

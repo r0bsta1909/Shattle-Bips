@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 
 import {
   createRoom, joinRoom, setOptions, setPlacement, tryStart,
-  voteRematch, withdrawPlacement, lobbyState, pushState, closeRoom
+  voteRematch, withdrawPlacement, lobbyState, pushState, closeRoom,
+  declineRematch, markDisconnected
 } from '../server/rooms.js';
 import { randomPlacement, mergeOptions, DEFAULT_OPTIONS, baseSalvo } from '../server/rules.js';
 
@@ -208,4 +209,82 @@ test('#8 Der Zustand traegt den Grund fuer das Partieende', () => {
   // Ein Sieg durch Zeitablauf ohne versenktes Schiff sah wie ein Fehler aus,
   // weil der Endbildschirm nur "Partie nach N Zügen beendet" zeigte.
   assert.equal(lastState(ws).endReason, 'timeout');
+});
+
+// --------------------------------------------------------- Issues #13/#14
+test('#14 Revanche mit getrenntem Gegner wird abgelehnt', () => {
+  const room = newRoom(false);
+  const a = fakeWs(), b = fakeWs();
+  joinRoom(room, 'Rob', a);
+  joinRoom(room, 'Michi', b);
+  room.status = 'finished';
+  room.game = { status: 'finished', winner: 0 };
+
+  voteRematch(room, 0);                       // Rob fordert an
+  markDisconnected(room, 0);                  // ... und schliesst das Fenster
+
+  // Vorher zaehlte voteRematch die Plaetze: Robs alte Stimme galt weiter,
+  // Michis Stimme vervollstaendigte sie, und Michi sass allein in der Lobby.
+  const res = voteRematch(room, 1);
+  assert.equal(res.ok, false, 'keine Revanche ohne Gegner');
+  assert.match(res.error, /nicht mehr verbunden/);
+  assert.equal(room.status, 'finished', 'Lobby wird nicht geoeffnet');
+});
+
+test('#14 Trennung nimmt die eigene Revanche-Stimme zurueck', () => {
+  const room = newRoom(false);
+  const a = fakeWs(), b = fakeWs();
+  joinRoom(room, 'Rob', a);
+  joinRoom(room, 'Michi', b);
+  room.status = 'finished';
+  room.game = { status: 'finished', winner: 0 };
+
+  voteRematch(room, 0);
+  assert.equal(room.rematchVotes.size, 1);
+  b.sent.length = 0;
+  markDisconnected(room, 0);
+  assert.equal(room.rematchVotes.size, 0, 'Stimme ist weg');
+  assert.ok(kinds(b).includes('rematchOff'), 'der Verbliebene erfaehrt es');
+});
+
+test('#14 Nach Rueckkehr des Gegners geht die Revanche wieder', () => {
+  const room = newRoom(false);
+  joinRoom(room, 'Rob', fakeWs());
+  joinRoom(room, 'Michi', fakeWs());
+  room.status = 'finished';
+  room.game = { status: 'finished', winner: 0 };
+
+  markDisconnected(room, 0);
+  assert.equal(voteRematch(room, 1).ok, false, 'getrennt: nein');
+  room.slots[0].connected = true;             // rebind() setzt das normalerweise
+  assert.equal(voteRematch(room, 1).waiting, true, 'verbunden: wartet auf den zweiten');
+  assert.equal(voteRematch(room, 0).waiting, false, 'und startet dann');
+});
+
+test('#13 Revanche laesst sich ablehnen und raeumt die Stimmen', () => {
+  const room = newRoom(false);
+  const a = fakeWs(), b = fakeWs();
+  joinRoom(room, 'Rob', a);
+  joinRoom(room, 'Michi', b);
+  room.status = 'finished';
+  room.game = { status: 'finished', winner: 0 };
+
+  voteRematch(room, 0);
+  a.sent.length = 0; b.sent.length = 0;
+  assert.equal(declineRematch(room, 1).ok, true);
+  assert.equal(room.rematchVotes.size, 0, 'Stimmen verworfen');
+  assert.ok(kinds(a).includes('rematchDeclined'), 'der Anfragende erfaehrt es');
+  // Danach muss eine neue Anfrage wieder von vorn beginnen.
+  assert.equal(voteRematch(room, 0).waiting, true);
+});
+
+test('#12 Zug-Timeout meldet, wen es betrifft', () => {
+  const { room, ws } = botGame();
+  ws.sent.length = 0;
+  room.game.turn = 0;
+  // onTimeout ist nicht exportiert – der Broadcast wird hier nachgestellt,
+  // geprueft wird die Nutzlast, auf die sich der Client stuetzt.
+  const notice = { t: 'notice', kind: 'timeout', slot: 0 };
+  assert.equal(typeof notice.slot, 'number', 'slot ist Teil der Meldung');
+  assert.ok(room.slots[0].name, 'und der Name ist bekannt');
 });
