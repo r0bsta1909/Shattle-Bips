@@ -15,8 +15,8 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 - Schiffssymbole je Typ auf dem eigenen Brett (#19), Flottenübersicht mit gegnerischen
   Verlusten und eigenem Zustand plus Aufstellungsregel (#20 Teil 2, #21).
 - Scroll-Luft unter der klebenden Bedienleiste (#18 Teil 1).
-- **Eigene Regression behoben (#17):** ein CSS-`¹5` lief durch ein Python-Heredoc,
-  dort ist `¹` ein Oktal-Escape → im Raster stand `¹5`.
+- **Eigene Regression behoben (#17):** das CSS-Escape für „✕" lief durch ein Python-Heredoc,
+  das den Backslash als Oktal-Escape gelesen hat → im Raster stand „¹5".
 
 **Gelernt**
 - Dritte Rendering-Regression in Folge. Deshalb jetzt `test/client-render.test.js`: ein

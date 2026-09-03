@@ -56,6 +56,24 @@ passierte, wechselte der Bildschirm nie: von außen ein toter Knopf.
 schreiben, der benannte Kinder hat. Statisch abgesichert in `test/client.test.js` — der Test
 liest aus dem Markup, welche IDs weitere IDs enthalten, und verbietet Schreibzugriffe darauf.
 
+### Escapes nie durch ein Python-Heredoc schicken
+**Symptom:** Auf getroffenen eigenen Feldern stand „¹5" statt eines Kreuzes.
+**Ursache:** Das CSS-Escape für ✕ wurde in einem `python - <<'PY'`-Block geschrieben. Python
+liest den Backslash als **Oktal-Escape** (Wert 185 = `¹`), die restliche Ziffer bleibt stehen.
+**Regel:** Zeichen **direkt** schreiben (`content:"✕"`), nicht als Escape. Und Datei­änderungen
+mit Sonderzeichen über das Edit-Werkzeug machen, nicht über Skript-Heredocs. Diese Falle ist
+zweimal zugeschlagen — beim zweiten Mal ausgerechnet in dem Satz, der sie beschreibt.
+Abgesichert: `test/client.test.js` prüft, dass `content:`-Werte genau ein Zeichen lang sind,
+und sucht in den ausgelieferten Dateien nach Mojibake-Markern.
+
+### Den Client wirklich ausführen, nicht nur statisch prüfen
+Drei Rendering-Regressionen in Folge (#9, #10, #17) waren statisch unsichtbar.
+`test/client-render.test.js` fährt `app.js` in einem selbstgeschriebenen Mini-DOM hoch und
+treibt es über dieselben WebSocket-Nachrichten an, die der Server schickt. Das DOM modelliert
+absichtlich die Fallen: `textContent` löscht Kinder samt IDs, `dataset` speichert nur Strings.
+**Regel:** Wer am Rendering etwas ändert, ergänzt dort einen Fall. Und: der Prüfstand sammelt
+die Timer des Clients ein — die 500-ms-Zuguhr hält den Testprozess sonst wach.
+
 ### Statische Prüfung schlägt Vertrauen
 `test/client.test.js` gleicht ab, dass jede `$('id')` aus `app.js` im HTML existiert, dass IDs
 eindeutig sind und dass keine Container beschrieben werden. Ohne Typen und Build ist das die
