@@ -103,3 +103,24 @@ test('Aufstellung: Anleitung und Statusmeldung sind getrennte Elemente', () => {
   assert.match(app, /\$\('place-status'\)\.textContent/, 'Status geht nach place-status');
   assert.ok(!/\$\('place-hint'\)\.textContent\s*=/.test(app), 'und nie mehr nach place-hint');
 });
+
+test('CSS-content-Werte sind einzelne Zeichen, keine kaputten Escapes', () => {
+  // Loeste Issue #17 aus: ein CSS-"\2715" (✕) lief durch ein Python-Heredoc,
+  // dort ist \271 ein Oktal-Escape -> "¹", Rest "5". Im Raster stand "¹5".
+  const values = [...css.matchAll(/content\s*:\s*"([^"]*)"/g)].map((m) => m[1]);
+  const verdaechtig = values.filter((v) => [...v].length > 1);
+  assert.deepEqual(verdaechtig, [],
+    `content-Werte mit mehr als einem Zeichen: ${verdaechtig.map((v) => JSON.stringify(v)).join(', ')}`);
+});
+
+test('Keine Zeichensatz-Schaeden in den ausgelieferten Dateien', () => {
+  // Klassische Mojibake-Marker. Sie entstehen, wenn Text durch ein Werkzeug
+  // laeuft, das die Kodierung wechselt - im Browser sieht man sie sofort,
+  // in einem Diff leicht zu uebersehen.
+  for (const [name, text] of [['index.html', html], ['style.css', css], ['app.js', app]]) {
+    for (const marker of ['\uFFFD', 'Ã¤', 'Ã¶', 'Ã¼', 'ÃŸ', 'â€']) {
+      assert.ok(!text.includes(marker),
+        `${name} enthält den Mojibake-Marker ${JSON.stringify(marker)}`);
+    }
+  }
+});

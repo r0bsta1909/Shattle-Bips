@@ -7,6 +7,33 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-03 (Fortsetzung) · Playtest-Runde 3
+
+**Geändert**
+- Rasterbeschriftung A–J / 1–10 als Rahmen um das Raster (#16). Bewusst als Geschwister,
+  damit `grid.children[i]` weiterhin Feld i ist — davon hängt der ganze Client ab.
+- Schiffssymbole je Typ auf dem eigenen Brett (#19), Flottenübersicht mit gegnerischen
+  Verlusten und eigenem Zustand plus Aufstellungsregel (#20 Teil 2, #21).
+- Scroll-Luft unter der klebenden Bedienleiste (#18 Teil 1).
+- **Eigene Regression behoben (#17):** ein CSS-`¹5` lief durch ein Python-Heredoc,
+  dort ist `¹` ein Oktal-Escape → im Raster stand `¹5`.
+
+**Gelernt**
+- Dritte Rendering-Regression in Folge. Deshalb jetzt `test/client-render.test.js`: ein
+  selbstgeschriebenes Mini-DOM führt `app.js` wirklich aus und treibt es über die
+  WebSocket-Nachrichten an. Es modelliert absichtlich, dass `textContent` Kinder löscht.
+  Hätte #9, #10 und #17 alle gefangen.
+- Werkzeugkette ist Teil der Fehlerquelle: Escapes nie durch ein Python-Heredoc schicken.
+- Client-Timer halten den Testprozess wach, genau wie die Zug-Timer serverseitig.
+
+**Offen**
+- #20 schlägt ein neues Salvensystem vor (1×4, 1×3, 1×2 als einmalige Ressourcen, sonst
+  Einzelschuss). Das ist eine Kernregeländerung — Entscheidung liegt beim Nutzer. Simulation
+  zeigt: „1 Schuss pro Zug" verlängert die Partie von 39 auf **103 Züge**.
+- Simulation widerspricht zwei Vermutungen aus #18: ohne Aufklärung sinkt die Comeback-Rate
+  auf 37 % und der Startvorteil steigt auf 53 %; mit nur 1 Köder sinkt sie auf 36 %. Beide
+  helfen also dem Zurückliegenden.
+
 ## 2026-09-03 · `da3bbd5` · v0.4.0 · b260903.13xx
 
 Erste Sitzung mit echtem Playtest. Reihenfolge: Update integriert, Features gebaut, dann

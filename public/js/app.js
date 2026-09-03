@@ -9,6 +9,17 @@ const FLEET = [
   { type: 'zerstoerer', label: 'Zerstörer', len: 2 }
 ];
 
+// Ein Zeichen je Schiffstyp (Issue #19). Bewusst geometrisch statt Emoji:
+// Emoji werden je Plattform anders breit gerendert und sprengen die Kachel.
+const SHIP_SYM = {
+  traeger: '⬟',
+  schlachtschiff: '⬢',
+  kreuzer: '◆',
+  uboot: '◉',
+  zerstoerer: '▪',
+  decoy: '◌'
+};
+
 const $ = (id) => document.getElementById(id);
 const ix = (r, c) => r * N + c;
 const rc = (i) => [Math.floor(i / N), i % N];
@@ -328,7 +339,44 @@ function loadPlacement(p) {
 }
 
 // --------------------------------------------------------------- Partie
+/**
+ * Legt A–J und 1–10 als Streifen um ein Raster (Issue #16).
+ *
+ * Bewusst als Geschwister in einem Rahmen und nicht als zusaetzliche Zellen:
+ * der ganze Client adressiert Felder ueber grid.children[i], das muss
+ * unveraendert Feld i bleiben. Idempotent – buildGrid laeuft mehrfach.
+ */
+function ensureFrame(el) {
+  if (el.parentElement?.classList.contains('board-frame')) return;
+
+  const frame = document.createElement('div');
+  frame.className = 'board-frame';
+  el.parentElement.insertBefore(frame, el);
+
+  const corner = document.createElement('div');
+  corner.className = 'axis-corner';
+
+  const top = document.createElement('div');
+  top.className = 'axis axis-top';
+  for (let c = 0; c < N; c++) {
+    const s = document.createElement('span');
+    s.textContent = String.fromCharCode(65 + c);
+    top.appendChild(s);
+  }
+
+  const left = document.createElement('div');
+  left.className = 'axis axis-left';
+  for (let r = 0; r < N; r++) {
+    const s = document.createElement('span');
+    s.textContent = String(r + 1);
+    left.appendChild(s);
+  }
+
+  frame.append(corner, top, left, el);
+}
+
 function buildGrid(el, onClick, onHover) {
+  ensureFrame(el);
   el.innerHTML = '';
   for (let i = 0; i < N * N; i++) {
     const d = document.createElement('div');
@@ -375,8 +423,23 @@ function renderGame() {
       el.classList.add(s.sunk ? 'sunk' : (s.hits.includes(i) ? 'hit' : 'ship'));
       if (manShip === s.index) el.classList.add('manship');
     }
+    // Typsymbol auf das erste Feld – aber nicht dorthin, wo schon ein Treffer
+    // sein Kreuz zeichnet, sonst liegen zwei Zeichen uebereinander (#19).
+    const head = s.cells[0];
+    if (!s.sunk && !s.hits.includes(head)) {
+      own.children[head].textContent = SHIP_SYM[s.type] || '';
+      own.children[head].classList.add('sym');
+    }
   });
-  for (const d of state.own.decoys) for (const i of d.cells) own.children[i].classList.add(d.hits.includes(i) ? 'hit' : 'decoy');
+  for (const d of state.own.decoys) {
+    d.cells.forEach((i, k) => {
+      own.children[i].classList.add(d.hits.includes(i) ? 'hit' : 'decoy');
+      if (k === 0 && !d.hits.includes(i)) {
+        own.children[i].textContent = SHIP_SYM.decoy;
+        own.children[i].classList.add('sym');
+      }
+    });
+  }
   for (const i of state.own.incoming) {
     const el = own.children[i];
     if (!el.classList.contains('hit') && !el.classList.contains('sunk')) el.classList.add('miss');
@@ -400,6 +463,8 @@ function renderGame() {
   $('btn-maneuver').disabled = !mine || !(opts?.maneuverEnabled ?? true);
   $('btn-scan').textContent = mode === 'scan' ? 'Scan abbrechen' : 'Aufklären';
 
+  renderFleetLegend();
+
   const box = $('maneuver-ships'); box.innerHTML = '';
   for (const s of state.own.ships) {
     if (s.hits.length || s.sunk) continue;
@@ -410,6 +475,36 @@ function renderGame() {
     box.appendChild(b);
   }
   if (!clockTimer) clockTimer = setInterval(tickClock, 500);
+}
+
+/**
+ * Was steht dem Gegner noch, und wie steht meine Flotte da (Issues #20, #21).
+ * Der Server liefert dafuer schon alles: sunkEnemy sind die versenkten
+ * Gegnertypen, own.ships den eigenen Zustand.
+ */
+function renderFleetLegend() {
+  const row = (sym, label, len, cls, note) => {
+    const li = document.createElement('li');
+    if (cls) li.className = cls;
+    li.innerHTML = `<span class="sym">${sym}</span>`
+      + `<span class="name">${label}</span>`
+      + `<span class="len">${note || len}</span>`;
+    return li;
+  };
+
+  const foe = $('fleet-foe'); foe.innerHTML = '';
+  const sunk = state.sunkEnemy || [];
+  for (const f of FLEET) {
+    const gone = sunk.includes(f.type);
+    foe.appendChild(row(SHIP_SYM[f.type], f.label, f.len, gone ? 'gone' : '', gone ? 'versenkt' : `${f.len} Felder`));
+  }
+
+  const own = $('fleet-own'); own.innerHTML = '';
+  for (const s of state.own.ships) {
+    const cls = s.sunk ? 'gone' : (s.hits.length ? 'hurt' : '');
+    const note = s.sunk ? 'versenkt' : (s.hits.length ? `${s.hits.length}/${s.len} getroffen` : `${s.len} Felder`);
+    own.appendChild(row(SHIP_SYM[s.type], s.label, s.len, cls, note));
+  }
 }
 
 function tickClock() {
