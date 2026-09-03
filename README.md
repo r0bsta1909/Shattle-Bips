@@ -248,10 +248,26 @@ eine Zeile im Log. Mögliche `reason`-Werte:
 | `no-token` | `GITHUB_TOKEN` ist nicht gesetzt |
 | `no-repo` | weder `FEEDBACK_REPO` noch `RENDER_GIT_REPO_SLUG` gesetzt |
 | `auth` | GitHub lehnt den Token ab (401) — abgelaufen, widerrufen, oder mit Anführungszeichen eingefügt |
-| `forbidden` | 403. Steht dabei `"reads": true`, darf der Token lesen aber nicht schreiben — er hat „Issues: **Read-only**" statt „Read and write" |
+| `forbidden` | 403. Mit `"reads": true` darf der Token lesen, aber nicht schreiben — siehe die drei Fallen unten |
 | `not-found` | Repo für diesen Token nicht sichtbar (404) — Pfad falsch oder Repo nicht im Token ausgewählt |
 | `issues-disabled` | Issues sind im Repo abgeschaltet |
 | `github-down` | GitHub antwortet mit 5xx — vorübergehend, nichts zu tun |
+
+**Drei Fallen beim Token**, die alle dasselbe Bild erzeugen (Lesen geht, Anlegen scheitert mit 403):
+
+1. **„Repository access" steht auf „Public Repositories (read-only)".** Das ist die Voreinstellung
+   und der häufigste Fall. In diesem Modus ist jeder Zugriff lesend, und der Abschnitt
+   „Repository permissions" lässt sich gar nicht bedienen — eine dort gesetzte Berechtigung wird
+   beim Speichern still verworfen. Nötig ist **„Only select repositories"** mit ausgewähltem Repo;
+   erst danach wird der Rechte-Abschnitt aktiv. Ein Token in diesem Modus zeigt in der
+   Token-Übersicht „no access to any repository" an.
+2. **„Issue Types" ist nicht „Issues".** „Issue Types" steht unter *Organization permissions* und
+   regelt nur eigene Issue-Typen. Gebraucht wird **„Issues"** unter *Repository permissions*.
+3. **„Issues" steht auf Read-only.** `POST /repos/…/issues` verlangt **write**, `GET` nur read —
+   deshalb gehen alle Leseproben durch und erst das Anlegen scheitert.
+
+Die Reihenfolge ist wichtig: erst „Only select repositories" plus Repo, dann „Issues: Read and
+write". Andersherum wird die Berechtigung nicht gespeichert.
 
 Zu bedenken: Dieses Repo ist **öffentlich**, Issues also auch. Wer das nicht will, setzt
 `FEEDBACK_REPO` auf ein privates Repo — der Token darf ein anderes Repo adressieren als das,

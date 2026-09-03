@@ -227,11 +227,17 @@ export async function diagnose() {
         sink, ok: false, repo,
         reason: lastError.reason,
         reads: true,               // Lesen geht, nur das Schreiben nicht
-        since: lastError.at
+        since: lastError.at,
+        permissions: info.permissions || null
       };
     }
 
-    return { sink, ok: true, reason: 'ok', repo, private: !!info.private, writeUnproven: true };
+    return {
+      sink, ok: true, reason: 'ok', repo,
+      private: !!info.private,
+      writeUnproven: true,
+      permissions: info.permissions || null
+    };
   } catch (err) {
     return { sink, ok: false, repo, reason: 'unreachable', detail: String(err && err.message || err) };
   }
@@ -246,7 +252,15 @@ export function explain(d) {
     case 'no-repo': return 'Feedback-Senke github gewaehlt, aber weder FEEDBACK_REPO noch RENDER_GIT_REPO_SLUG ist gesetzt.';
     case 'auth': return `GITHUB_TOKEN wird von GitHub abgelehnt (401). Token abgelaufen, widerrufen oder mit Leerzeichen/Anfuehrungszeichen eingefuegt?`;
     case 'forbidden': return d.reads
-      ? `Der Token darf ${d.repo} lesen, aber keine Issues anlegen (403). Er steht auf "Issues: Read-only" – gebraucht wird "Read and write".`
+      ? [
+          `Der Token darf ${d.repo} lesen, aber keine Issues anlegen (403). Drei haeufige Ursachen:`,
+          '1. "Repository access" steht auf "Public Repositories (read-only)". In diesem Modus ist jeder',
+          '   Zugriff lesend und die Repository-Rechte lassen sich nicht setzen. Noetig: "Only select',
+          '   repositories" und das Repo auswaehlen - erst danach wird der Rechte-Abschnitt bedienbar.',
+          '2. Das Recht heisst "Issues" (Repository permissions), nicht "Issue Types" (Organization',
+          '   permissions). Letzteres regelt nur eigene Issue-Typen und hilft hier nicht.',
+          '3. "Issues" steht auf Read-only statt auf Read and write.'
+        ].join('\n')
       : `GITHUB_TOKEN darf auf ${d.repo} nicht zugreifen (403). Fehlt dem Token das Recht "Issues: Read and write"?`;
     case 'not-found': return `${d.repo} ist fuer diesen Token nicht sichtbar (404). Stimmt der Repo-Pfad, und ist das Repo in der Tokenkonfiguration ausgewaehlt?`;
     case 'issues-disabled': return `Issues sind fuer ${d.repo} abgeschaltet.`;
