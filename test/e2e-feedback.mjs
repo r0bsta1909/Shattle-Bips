@@ -31,6 +31,47 @@ check(vres.headers.get('cache-control') === 'no-store', 'Version wird nicht geca
 const health = await (await fetch(`${BASE}/healthz`)).json();
 check(health.version === v.label, 'healthz meldet dieselbe Version');
 
+// ------------------------------------------------------------ Cache-Politik
+// Regression: mit "max-age=1h" lief nach einem Deploy bis zu eine Stunde altes
+// app.js gegen neues index.html. Der Feedback-Knopf erschien dann, klickte aber
+// ins Leere. Statische Dateien muessen revalidiert werden, nicht blind gecacht.
+for (const file of ['/', '/js/app.js', '/css/style.css']) {
+  const r = await fetch(`${BASE}${file}`);
+  const cc = r.headers.get('cache-control') || '';
+  check(!/max-age=[1-9]/.test(cc), `${file}: kein blindes max-age (${cc || 'kein Header'})`);
+  check(/no-cache|no-store|max-age=0/.test(cc), `${file}: Revalidierung verlangt`);
+  check(!!r.headers.get('etag'), `${file}: ETag vorhanden`);
+}
+
+// Unveraenderte Datei muss 304 ohne Rumpf liefern, sonst kostet no-cache echte Bytes.
+//
+// Bewusst ueber node:http statt fetch: Node-fetch haengt von sich aus
+// "cache-control: no-cache" an den Request, und Express behandelt einen solchen
+// Request korrekterweise immer als veraltet – der Test wuerde nie 304 sehen.
+// Ein Browser schickt das nur beim harten Neuladen.
+const { request } = await import('node:http');
+
+const conditionalGet = (pathname, etag) => new Promise((resolve, reject) => {
+  const req = request(
+    { host: '127.0.0.1', port: Number(process.env.PORT), path: pathname, headers: { 'If-None-Match': etag } },
+    (res) => {
+      let bytes = 0;
+      res.on('data', (c) => { bytes += c.length; });
+      res.on('end', () => resolve({ status: res.statusCode, bytes }));
+    }
+  );
+  req.on('error', reject);
+  req.end();
+});
+
+const first = await fetch(`${BASE}/js/app.js`);
+const again = await conditionalGet('/js/app.js', first.headers.get('etag'));
+check(again.status === 304, `unveränderte Datei revalidiert zu 304 (war ${again.status})`);
+check(again.bytes === 0, `304 kommt ohne Rumpf (${again.bytes} Byte)`);
+
+const changed = await conditionalGet('/js/app.js', 'W/"veraltet"');
+check(changed.status === 200, 'veralteter ETag liefert die Datei neu aus');
+
 // ----------------------------------------------------------- Ablehnungsfälle
 check((await post({ text: 'ne' })).status === 400, 'zu kurzer Text: 400');
 check((await post({ text: 'x'.repeat(4001) })).status === 400, 'zu langer Text: 400');

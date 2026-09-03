@@ -24,7 +24,21 @@ const app = express();
 // aus, damit sich X-Forwarded-For nicht faelschen laesst.
 if (process.env.RENDER) app.set('trust proxy', 1);
 
-app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '1h' }));
+// "no-cache" heisst nicht "nicht cachen", sondern "vor jeder Nutzung rueckfragen".
+// Der Browser behaelt die Datei, validiert sie aber gegen den ETag und bekommt in
+// aller Regel ein leeres 304 zurueck – ein paar hundert Byte pro Aufruf.
+//
+// Vorher stand hier maxAge: '1h'. Das ist fuer ein Projekt ohne Build-Schritt und
+// ohne Hashes in den Dateinamen die falsche Wahl: nach einem Deploy laeuft bis zu
+// eine Stunde lang altes app.js gegen neues index.html. Sichtbar wurde das am
+// Feedback-Knopf, der zwar erschien, aber ins Leere klickte – der Handler steckte
+// im alten Skript. Der Versionsstand im Kopf kommt von /version und war zugleich
+// schon der neue, was die Fehlersuche zusaetzlich in die Irre fuehrt.
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  etag: true,
+  lastModified: true,
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache')
+}));
 app.get('/healthz', (_req, res) => res.json({ ok: true, rooms: roomCount(), version: VERSION.label }));
 
 // ------------------------------------------------------------------ Version
