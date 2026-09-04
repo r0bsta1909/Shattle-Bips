@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ix, validatePlacement, makePlayer, createGame, beginTurn,
   applySalvo, applyManeuver, applyDive, applyScan, requiredShots,
-  baseSalvo, randomPlacement, aliveShips, allSunk, FLEET_SPEC
+  baseSalvo, randomPlacement, aliveShips, allSunk, FLEET_SPEC, summarize, UNKNOWN
 } from '../server/rules.js';
 
 // Deterministische Aufstellung: alles in Spalten mit Abstand
@@ -345,4 +345,145 @@ test('Bot denkt innerhalb des eingestellten Bereichs', () => {
   // antwortet der Bot ueberall dort sofort, wo jemand das Argument vergisst.
   const ohne = thinkDelay({ rand: () => 0 });
   assert.equal(ohne, DEFAULT_OPTIONS.botMinSeconds * 1000);
+});
+
+// ------------------------------------------------------- Täuschungsbilanz
+/**
+ * Salve mit genau der geforderten Schusszahl. Fehlende Schuesse gehen in die
+ * leere Reihe 10 – eine Salve mit falscher Anzahl wird abgewiesen und taucht
+ * dann im Protokoll gar nicht auf.
+ */
+function salve(g, slot, ziele) {
+  const shots = ziele.slice();
+  const wissen = g.players[slot].tracking;
+  // Nur unbeschossene Felder auffuellen: auf dasselbe Feld zweimal zu
+  // schiessen weist applySalvo ab, und die Salve taucht dann im Protokoll
+  // gar nicht auf - der Test prueft danach ins Leere.
+  for (let f = 99; f >= 0 && shots.length < requiredShots(g, slot); f--) {
+    if (!shots.includes(f) && wissen[f] === UNKNOWN) shots.push(f);
+  }
+  return applySalvo(g, slot, shots);
+}
+
+test('Bilanz: Köder zählen die geschluckten Schüsse', () => {
+  const g = mk();
+  // B schiesst auf As Koeder bei 7,0 und 7,1 - beides meldet "Treffer",
+  // versenkt aber nie etwas. Genau das soll die Bilanz sichtbar machen.
+  g.turn = 1;
+  const r = salve(g, 1, [ix(7, 0), ix(7, 1)]);
+  assert.equal(r.ok, true, 'Selbsttest: Salve wurde angenommen');
+
+  const b = summarize(g, 0).find((e) => e.key === 'decoyEaten');
+  assert.ok(b, 'Köder-Kennzahl vorhanden');
+  assert.equal(b.value, 2, 'zwei Schüsse geschluckt');
+  assert.equal(b.of, r.results.length, 'gemessen an allen abgegebenen');
+});
+
+test('Bilanz: ohne Köder in den Regeln entfällt die Kennzahl', () => {
+  // Eine Bilanz aus lauter Nullen sagt weniger als eine kurze.
+  const ohne = { ships: FIXED.ships, decoys: [] };
+  const opts = mergeOptions({ decoyCount: 0 });
+  const g = createGame(makePlayer('A', ohne, { options: opts }),
+    makePlayer('B', ohne, { options: opts }), { starter: 0, options: opts });
+  beginTurn(g);
+  assert.equal(summarize(g, 0).some((e) => e.key === 'decoyEaten'), false);
+});
+
+test('Bilanz: Manöver zieht ein Schiff aus einem späteren Schuss', () => {
+  const g = mk();
+  // A versetzt den Zerstoerer (0,8 und 1,8) um ein Feld nach rechts.
+  const idx = g.players[0].ships.findIndex((s) => s.type === 'zerstoerer');
+  const alt = g.players[0].ships[idx].cells.slice();
+  assert.equal(applyManeuver(g, 0, idx, 'right').ok, true, 'Manöver geht');
+  assert.notDeepEqual(g.players[0].ships[idx].cells, alt, 'Schiff steht woanders');
+
+  // B schiesst auf das alte Feld - dort ist jetzt Wasser.
+  g.turn = 1;
+  const r = salve(g, 1, [alt[0], alt[1]]);
+  assert.equal(r.ok, true, 'Selbsttest: Salve wurde angenommen');
+  assert.equal(r.results.slice(0, 2).every((x) => x.result === 'water'), true, 'beide ins Leere');
+
+  const m = summarize(g, 0).find((e) => e.key === 'maneuver');
+  assert.ok(m, 'Manöver-Kennzahl vorhanden');
+  assert.equal(m.value, 1, 'ein Manöver gefahren');
+  assert.equal(m.saved, 2, 'zwei Schüsse ins Leere gezogen');
+  assert.equal(m.ships, 1, 'ein Schiff gerettet');
+});
+
+test('Bilanz: ein Schuss VOR dem Manöver zählt nicht als Rettung', () => {
+  const g = mk();
+  const idx = g.players[0].ships.findIndex((s) => s.type === 'zerstoerer');
+  const alt = g.players[0].ships[idx].cells.slice();
+
+  // Erst schiessen (Treffer), dann waere das Schiff beschaedigt und duerfte
+  // gar nicht mehr manoevrieren - deshalb auf ein leeres Feld daneben.
+  g.turn = 1;
+  assert.equal(salve(g, 1, [ix(9, 9), ix(9, 8)]).ok, true);
+  g.turn = 0;
+  assert.equal(applyManeuver(g, 0, idx, 'right').ok, true);
+
+  const m = summarize(g, 0).find((e) => e.key === 'maneuver');
+  assert.equal(m.saved, 0, 'frühere Schüsse hat das Manöver nicht verhindert');
+  assert.equal(m.ships, 0);
+  assert.ok(!alt.includes(ix(9, 9)), 'Selbsttest: es wurde woanders hingeschossen');
+});
+
+test('Bilanz: Ausweichen zählt Salven und entwertete Meldungen', () => {
+  const g = mk();
+  assert.equal(applyDive(g, 0).ok, true, 'A taucht');
+  g.turn = 1;
+  // B schiesst auf As U-Boot (0,6) und daneben ins Wasser.
+  const r = salve(g, 1, [ix(0, 6)]);
+  assert.equal(r.ok, true, 'Selbsttest: Salve wurde angenommen');
+  assert.equal(r.evaded, true, 'Selbsttest: es wurde ausgewichen');
+
+  const e = summarize(g, 0).find((x) => x.key === 'evaded');
+  assert.ok(e, 'Ausweich-Kennzahl vorhanden');
+  assert.equal(e.value, 1, 'eine Salve');
+  assert.ok(e.cells >= 1, 'mindestens eine Wasser-Meldung entwertet');
+});
+
+test('Bilanz: ein Schuss auf das Feld VOR dem Manöver ist keine Rettung', () => {
+  // Konstruierbar nur ueber das getauchte U-Boot: ein Schuss auf seine Felder
+  // meldet Wasser, ohne dass es beschaedigt wird - es darf danach also noch
+  // manoevrieren. Ohne die Zeitordnung in summarize() wuerde dieser fruehere
+  // Schuss faelschlich als Rettung gezaehlt.
+  const g = mk();
+  assert.equal(applyDive(g, 0).ok, true);
+  g.turn = 1;
+  const r = salve(g, 1, [ix(0, 6)]);              // erstes Feld des U-Boots
+  assert.equal(r.evaded, true, 'Selbsttest: ausgewichen, Meldung ist Wasser');
+
+  g.turn = 0;
+  const idx = g.players[0].ships.findIndex((s) => s.type === 'uboot');
+  const alt = g.players[0].ships[idx].cells.slice();
+  assert.ok(alt.includes(ix(0, 6)), 'Selbsttest: es wurde auf ein altes Feld geschossen');
+  assert.equal(applyManeuver(g, 0, idx, 'down').ok, true, 'U-Boot weicht aus');
+
+  const m = summarize(g, 0).find((e) => e.key === 'maneuver');
+  assert.equal(m.saved, 0, 'was vorher passierte, hat das Manöver nicht verhindert');
+});
+
+test('Bilanz: ein Treffer auf dem alten Feld ist keine Rettung', () => {
+  // Das Schiff kann zurueckwandern. Steht es wieder da, ist ein Schuss dorthin
+  // ein TREFFER - gerettet hat das erste Manoever dann gar nichts. Ohne die
+  // Bedingung "nur Wasser zaehlt" wuerde es trotzdem als Rettung gebucht.
+  const g = mk();
+  const idx = g.players[0].ships.findIndex((s) => s.type === 'zerstoerer');
+  const zuhause = g.players[0].ships[idx].cells.slice();
+
+  assert.equal(applyManeuver(g, 0, idx, 'right').ok, true, 'raus');
+  g.turn = 1;
+  assert.equal(salve(g, 1, [ix(5, 5)]).ok, true, 'Gegner schießt woanders hin');
+  g.turn = 0;
+  assert.equal(applyManeuver(g, 0, idx, 'left').ok, true, 'und wieder zurück');
+  assert.deepEqual(g.players[0].ships[idx].cells, zuhause, 'Selbsttest: steht wieder da');
+
+  g.turn = 1;
+  const r = salve(g, 1, [zuhause[0], zuhause[1]]);
+  assert.equal(r.results.slice(0, 2).every((x) => x.result !== 'water'), true,
+    'Selbsttest: das sind Treffer, kein Wasser');
+
+  const m = summarize(g, 0).find((e) => e.key === 'maneuver');
+  assert.equal(m.saved, 0, 'ein Treffer auf dem alten Feld rettet nichts');
 });

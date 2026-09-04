@@ -41,10 +41,15 @@ function connect() {
   ws = new WebSocket(`${proto}://${location.host}/ws`);
   ws.onopen = () => {
     $('conn').textContent = 'verbunden';
+    $('conn').classList.remove('down');
     send({ t: 'hello', name: nameValue(), code: myCode, token: myToken });
     setInterval(() => { if (ws.readyState === 1) send({ t: 'ping' }); }, 300_000);
   };
-  ws.onclose = () => { $('conn').textContent = 'getrennt – verbinde neu…'; setTimeout(connect, 2000); };
+  ws.onclose = () => {
+    $('conn').textContent = 'getrennt – verbinde neu…';
+    $('conn').classList.add('down');
+    setTimeout(connect, 2000);
+  };
   ws.onmessage = (ev) => handle(JSON.parse(ev.data));
 }
 const send = (m) => ws && ws.readyState === 1 && ws.send(JSON.stringify(m));
@@ -91,6 +96,113 @@ function flash(text, kind = '', sub = '') {
   clearTimeout(flashTimer);
   flashTimer = setTimeout(() => el.classList.remove('show'), 1500);
 }
+
+// ============================================================ Ereignisstrom
+// Ein Ort, an dem aus Servernachrichten und Zustandswechseln BENANNTE
+// Ereignisse werden; Effekte haengen sich daran. Vorher standen die Ausloeser
+// der Einblendung ueber die Nachrichtenzweige verstreut - jeder weitere Effekt
+// (Ton, spaeter Notizen oder Haptik) haette dieselbe Suche noetig gemacht.
+//
+// Neuen Effekt anschliessen: onEvent(...). Neues Ereignis: emit(...) an der
+// Stelle, an der es entsteht. Die Verbraucher muessen davon nichts wissen.
+const eventListeners = [];
+const onEvent = (fn) => eventListeners.push(fn);
+
+function emit(kind, data = {}) {
+  for (const fn of eventListeners) {
+    // Ein kaputter Effekt darf die anderen nicht mitreissen - der Ton soll
+    // nicht das Spielbrett lahmlegen.
+    try { fn(kind, data); } catch (err) { console.error('Effekt', kind, err); }
+  }
+}
+
+// ---- Effekt 1: Einblendung -------------------------------------------------
+// Ein Eintrag je Ereignis. Wer eine Meldung aendern will, aendert hier eine
+// Zeile statt einen Nachrichtenzweig zu suchen.
+const FLASH_TEXTE = {
+  sunk: (d) => [d.count > 1 ? `${d.count} Schiffe versenkt!` : `${d.sym} ${d.label} versenkt!`,
+    'sunk', d.count === 1 ? d.at : ''],
+  hit: (d) => [d.count > 1 ? `${d.count} Treffer!` : 'Treffer!', 'good'],
+  scan: (d) => [d.count === 0 ? 'Nichts geortet' : `${d.count} Felder belegt`,
+    d.count ? 'good' : '', `Aufklärung um ${d.at}`],
+  evaded: () => ['U-Boot ausgewichen', 'bad', 'Deine Wasser-Meldungen dieser Salve gelten nicht mehr'],
+  foeManeuver: (d) => ['Flotte manövriert', '', `${d.by} hat ein Schiff versetzt`],
+  lost: (d) => [`${d.sym} ${d.label} verloren`, 'bad', `${d.by} hat getroffen`]
+};
+onEvent((kind, d) => { const f = FLASH_TEXTE[kind]; if (f) flash(...f(d)); });
+
+// ---- Effekt 2: Ton ---------------------------------------------------------
+// Reine Oszillatoren, keine Dateien: das Projekt hat keinen Build-Schritt und
+// soll keine Assets ausliefern. Jeder Klang ist eine Liste von Teiltoenen -
+// einen neuen anzulegen heisst, hier eine Zeile zu ergaenzen.
+//   f = Startfrequenz, to = Zielfrequenz (Gleiten), d = Dauer, w = Wellenform,
+//   v = Lautstaerke, at = Versatz zum Beginn.
+const KLAENGE = {
+  scan:        [{ f: 1180, d: .09, v: .16 }, { f: 1180, d: .09, v: .11, at: .17 }],
+  hit:         [{ f: 190, to: 120, d: .16, w: 'square', v: .26 }],
+  sunk:        [{ f: 300, to: 80, d: .55, w: 'sawtooth', v: .28 }],
+  water:       [{ f: 300, to: 240, d: .10, v: .10 }],
+  evaded:      [{ f: 720, to: 250, d: .30, v: .18 }],
+  lost:        [{ f: 220, to: 55, d: .80, w: 'triangle', v: .30 }],
+  incoming:    [{ f: 95, to: 70, d: .22, w: 'square', v: .16 }],
+  foeManeuver: [{ f: 420, to: 520, d: .18, w: 'triangle', v: .14 }],
+  yourTurn:    [{ f: 520, d: .07, v: .13 }, { f: 780, d: .10, v: .13, at: .08 }],
+  win:         [{ f: 523, d: .12, w: 'triangle', v: .24 }, { f: 659, d: .12, w: 'triangle', v: .24, at: .12 },
+                { f: 784, d: .26, w: 'triangle', v: .24, at: .24 }],
+  lose:        [{ f: 392, d: .15, w: 'triangle', v: .22 }, { f: 311, d: .15, w: 'triangle', v: .22, at: .15 },
+                { f: 233, d: .34, w: 'triangle', v: .22, at: .30 }]
+};
+
+const Ton = (() => {
+  let ctx = null;
+  let an = localStorage.getItem('nebel.ton') !== 'aus';
+
+  function kontext() {
+    if (!an) return null;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!ctx) ctx = new AC();
+    // Browser lassen Ton erst nach einer Nutzergeste zu. Statt beim Laden zu
+    // scheitern, wird hier nachgezogen - jeder Klick im Spiel ist eine Geste.
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  function spiele(name) {
+    const c = kontext();
+    const teile = KLAENGE[name];
+    if (!c || !teile) return;
+    for (const t of teile) {
+      const o = c.createOscillator();
+      const g = c.createGain();
+      const t0 = c.currentTime + (t.at || 0);
+      const dauer = t.d || .12;
+      o.type = t.w || 'sine';
+      o.frequency.setValueAtTime(t.f, t0);
+      if (t.to) o.frequency.exponentialRampToValueAtTime(t.to, t0 + dauer);
+      // Kurze Rampen statt harter Schnitte, sonst knackt es. Und nie auf 0:
+      // exponentielle Rampen vertragen keine Null.
+      g.gain.setValueAtTime(.0001, t0);
+      g.gain.exponentialRampToValueAtTime(t.v || .2, t0 + .012);
+      g.gain.exponentialRampToValueAtTime(.0001, t0 + dauer);
+      o.connect(g).connect(c.destination);
+      o.start(t0);
+      o.stop(t0 + dauer + .03);
+    }
+  }
+
+  return {
+    spiele,
+    get an() { return an; },
+    schalten() {
+      an = !an;
+      localStorage.setItem('nebel.ton', an ? 'ein' : 'aus');
+      if (an) spiele('scan');          // sofort hoerbar, dass er wieder an ist
+      return an;
+    }
+  };
+})();
+onEvent((kind) => Ton.spiele(kind));
 
 function log(html) {
   const li = document.createElement('li');
@@ -195,9 +307,11 @@ function handle(m) {
       if (sunkBefore && m.status === 'playing') {
         const verloren = m.own.ships.filter((sh) => sh.sunk && !sunkBefore.includes(sh.type));
         if (verloren.length) {
-          const sym = SHIP_SYM[verloren[0].type] || '';
-          flash(`${sym} ${verloren[0].label} verloren`, 'bad',
-            `${m.opponent.name} hat getroffen`);
+          emit('lost', {
+            sym: SHIP_SYM[verloren[0].type] || '',
+            label: verloren[0].label,
+            by: m.opponent.name
+          });
         }
       }
       if (turnChanged) {
@@ -205,7 +319,7 @@ function handle(m) {
         $('maneuver-panel').classList.add('hidden');
         // Wird es dein Zug, gehoert das Gegnerbrett nach vorn - man soll nicht
         // suchen muessen, wo geschossen wird.
-        if (m.turn === m.you && m.status === 'playing') showPane('pane-foe');
+        if (m.turn === m.you && m.status === 'playing') { showPane('pane-foe'); emit('yourTurn'); }
       }
       renderGame();
       break;
@@ -213,41 +327,48 @@ function handle(m) {
 
     case 'salvoResult': {
       for (const r of m.results) {
-        if (r.result === 'water') log(`<i>Du</i> → ${coord(r.cell)}: Wasser.`);
-        else if (r.result === 'hit') log(`<i>Du</i> → ${coord(r.cell)}: <b>Treffer.</b>`);
-        else log(`<i>Du</i> → ${coord(r.cell)}: <b>${r.shipLabel} versenkt!</b>`);
+        if (r.result === 'water') log(`<i>Orakel</i> → ${coord(r.cell)}: Wasser.`);
+        else if (r.result === 'hit') log(`<i>Orakel</i> → ${coord(r.cell)}: <b>Treffer.</b>`);
+        else log(`<i>Orakel</i> → ${coord(r.cell)}: <b>${r.shipLabel} versenkt.</b>`);
       }
       // Nur das Wichtigste einer Salve zeigen, nicht vier Meldungen nacheinander.
       const sunk = m.results.filter((r) => r.result === 'sunk');
       const hits = m.results.filter((r) => r.result === 'hit').length;
       if (sunk.length) {
-        const sym = SHIP_SYM[sunk[0].shipType] || '';
-        flash(sunk.length > 1 ? `${sunk.length} Schiffe versenkt!` : `${sym} ${sunk[0].shipLabel} versenkt!`,
-          'sunk', sunk.length === 1 ? coord(sunk[0].cell) : '');
+        emit('sunk', {
+          count: sunk.length, sym: SHIP_SYM[sunk[0].shipType] || '',
+          label: sunk[0].shipLabel, at: coord(sunk[0].cell)
+        });
       } else if (hits) {
-        flash(hits > 1 ? `${hits} Treffer!` : 'Treffer!', 'good');
+        emit('hit', { count: hits });
+      } else {
+        // Reines Wasser blendet nichts ein, klingt aber - sonst bliebe die
+        // haeufigste Handlung des Spiels ohne jede Rueckmeldung.
+        emit('water', {});
       }
       break;
     }
 
     case 'scanResult':
-      log(`<i>Du</i> → Aufklärung um <b>${coord(m.center)}</b>: <b>${m.count}</b> belegte Felder im 3×3-Feld.`);
-      flash(m.count === 0 ? 'Nichts geortet' : `${m.count} Felder belegt`,
-        m.count ? 'good' : '', `Aufklärung um ${coord(m.center)}`);
+      log(`<i>Orakel</i> → 3×3 um <b>${coord(m.center)}</b>: <b>${m.count}</b> belegte Felder. Köder zählt es nicht mit.`);
+      emit('scan', { count: m.count, at: coord(m.center) });
       break;
 
     case 'notice':
       // Jede Zeile nennt jetzt den Urheber – vorher stand da nur die Tatsache
       // und man wusste nicht, wen sie betrifft (Issue #12).
       if (m.kind === 'maneuvered') {
-        log(`<i>${foeName()}</i> → <b>Flotte manövriert.</b>`);
-        flash('Flotte manövriert', '', `${foeName()} hat ein Schiff versetzt`);
+        log(`<i>${foeName()}</i> → <b>Flotte manövriert.</b> Was du über seine Aufstellung weißt, kann veraltet sein.`);
+        emit('foeManeuver', { by: foeName() });
       }
       if (m.kind === 'evaded') {
-        log(`<i>${foeName()}</i> → <b>U-Boot ausgewichen.</b> Deine Wasser-Meldungen dieser Salve sind zurückgesetzt.`);
-        flash('U-Boot ausgewichen', 'bad', 'Deine Wasser-Meldungen dieser Salve gelten nicht mehr');
+        log(`<i>Orakel</i> → <b>U-Boot ausgewichen.</b> Die Wasser-Meldungen dieser Salve sind ungültig – gelogen wurde nicht.`);
+        emit('evaded', {});
       }
-      if (m.kind === 'incoming') log(`<i>${foeName()}</i> → Beschuss auf ${m.cells.map(coord).join(', ')}.`);
+      if (m.kind === 'incoming') {
+        log(`<i>${foeName()}</i> → Beschuss auf ${m.cells.map(coord).join(', ')}.`);
+        emit('incoming', { cells: m.cells });
+      }
       if (m.kind === 'timeout') log(`<i>${who(m.slot)}</i> → Zug verfallen, Zeit abgelaufen.`);
       if (m.kind === 'rematchDeclined') { closeRematchAsk(); $('rematch-hint').textContent = `${m.by} hat die Revanche abgelehnt.`; }
       if (m.kind === 'opponentGone') { openGone(m.by, m.seconds); }
@@ -682,6 +803,53 @@ function onFoeClick(i) {
   renderGame();
 }
 
+/**
+ * Zu jedem Kennzahl-Schluessel ein Satz. Kennt der Client einen Schluessel
+ * nicht, zeigt er ihn ROH an, statt ihn zu verschlucken - so kann der Server
+ * eine Kennzahl ergaenzen, ohne dass der Client im selben Zug mitziehen muss.
+ */
+const BILANZ_SAETZE = {
+  decoyEaten: (e, du) => e.value === 0
+    ? (du ? 'Deine Köder blieben unangetastet.' : 'Seine Köder hast du nicht angerührt.')
+    : `${du ? 'Deine' : 'Seine'} Köder haben <b>${e.value}</b> Schüsse geschluckt${
+        e.of ? ` – ${Math.round((e.value / e.of) * 100)} % von allem, was ${du ? 'auf dich' : 'auf ihn'} abgefeuert wurde` : ''}.`,
+  evaded: (e, du) => `${du ? 'Dein' : 'Sein'} U-Boot ist <b>${e.value}×</b> ausgewichen und hat dabei ${e.cells} Wasser-Meldungen entwertet.`,
+  maneuver: (e, du) => e.saved
+    ? `${du ? 'Deine' : 'Seine'} Manöver haben <b>${e.saved}</b> Schüsse ins Leere gezogen – ${e.ships} Schiff${e.ships === 1 ? '' : 'e'} gerettet.`
+    : `${e.value} Manöver gefahren, keines hat nachweislich einen Treffer verhindert.`,
+  scan: (e, du) => `${du ? 'Du hast' : 'Er hat'} <b>${e.value}×</b> aufgeklärt.`
+};
+
+function bilanzListe(eintraege, du) {
+  const ul = document.createElement('ul');
+  ul.className = 'summary-list';
+  for (const e of eintraege || []) {
+    const li = document.createElement('li');
+    const satz = BILANZ_SAETZE[e.key];
+    li.innerHTML = satz ? satz(e, du) : `${e.key}: ${e.value}`;
+    ul.appendChild(li);
+  }
+  return ul;
+}
+
+/** Das Orakel hat nie gelogen – hier steht, wie trotzdem getäuscht wurde. */
+function renderSummary(summary) {
+  const box = $('end-summary');
+  box.innerHTML = '';
+  if (!summary || (!summary.own?.length && !summary.foe?.length)) return;
+  for (const [titel, eintraege, du] of [
+    ['Deine Täuschung', summary.own, true],
+    [`Seine Täuschung`, summary.foe, false]
+  ]) {
+    if (!eintraege || !eintraege.length) continue;
+    const div = document.createElement('div');
+    const h4 = document.createElement('h4');
+    h4.textContent = titel;
+    div.append(h4, bilanzListe(eintraege, du));
+    box.appendChild(div);
+  }
+}
+
 function renderEnd() {
   const won = state.winner === state.you;
   $('end-title').textContent = won ? 'Gewonnen.' : 'Verloren.';
@@ -702,8 +870,20 @@ function renderEnd() {
   };
   paint('reveal-foe', state.reveal.foe);
   paint('reveal-own', state.reveal.own);
+  renderSummary(state.summary);
+  emit(won ? 'win' : 'lose', {});
   show('screen-end');
 }
+
+// Ton-Schalter in der Kopfzeile. Der Zustand ueberlebt den Neuaufruf, deshalb
+// muss das Symbol beim Laden schon stimmen.
+function renderSoundBtn() {
+  const b = $('btn-sound');
+  b.textContent = Ton.an ? '🔊' : '🔇';
+  b.title = Ton.an ? 'Ton ausschalten' : 'Ton einschalten';
+}
+$('btn-sound').onclick = () => { Ton.schalten(); renderSoundBtn(); };
+renderSoundBtn();
 
 // ------------------------------------------------------------- Eingaben
 $('name').value = localStorage.getItem('nebel.name') || '';

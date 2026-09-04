@@ -29,13 +29,13 @@ liest dort, *warum* es passiert ist.
 
 | Datei | Rolle |
 |---|---|
-| `server/rules.js` | Regel-Engine, rein, ohne Seiteneffekte. **Einzige Wahrheit über Regeln.** Basis für Server, Bot und Sim. |
+| `server/rules.js` | Regel-Engine, rein, ohne Seiteneffekte. **Einzige Wahrheit über Regeln.** Basis für Server, Bot und Sim. `game.log` ist das vollstaendige Partieprotokoll, `summarize()` liest die Taeuschungsbilanz daraus |
 | `server/rooms.js` | Lobbys, Zugtimer, Optionen, Revanche, Bot-Züge, autoritative Zustandsverteilung |
 | `server/index.js` | Express (statisch) + WebSocket + `/version` + `/api/feedback` |
 | `server/version.js` | Programmstand für die Kopfzeile |
 | `server/feedback.js` | Freitext-Feedback, drei Senken, Missbrauchsbremse, Diagnose |
 | `server/bot.js` | Probability-Density-Zielwahl, Ködererkennung, Gegnermodell |
-| `public/` | Client ohne Build-Schritt: `index.html`, `js/app.js`, `css/style.css` |
+| `public/` | Client ohne Build-Schritt. Effekte (Einblendung, Ton) haengen am **Ereignisstrom** (`emit`/`onEvent`) – ein neuer Effekt ist eine Zeile, kein Suchen in Nachrichtenzweigen |
 | `tools/sim.mjs` | Headless-Balancing auf derselben Engine, mit denselben Optionen |
 | `tools/shot.mjs` | Bildschirmfoto der Spielansicht ueber Chrome headless - macht Layout pruefbar |
 | `test/` | siehe unten |

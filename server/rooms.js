@@ -3,7 +3,7 @@
 import {
   makePlayer, createGame, randomPlacement, validatePlacement, mergeOptions, DEFAULT_OPTIONS,
   applySalvo, applyManeuver, applyDive, applyScan, passTurn, beginTurn,
-  requiredShots, shotsAvailable, baseSalvo, ownView, aliveShips, shipAlive
+  requiredShots, shotsAvailable, baseSalvo, ownView, aliveShips, shipAlive, summarize
 } from './rules.js';
 import {
   createBotBrain, botPlacement, planTurn, planShots,
@@ -298,6 +298,12 @@ export function pushState(room) {
       winner: g.winner,
       reveal: g.status === 'finished'
         ? { own: ownView(me), foe: ownView(foe) }
+        : null,
+      // Taeuschungsbilanz beider Seiten, erst am Ende. Verraet nichts, was die
+      // Aufdeckung darueber nicht ohnehin zeigt - und die gegnerische Bilanz
+      // ist die interessantere: sie erklaert, WARUM es so ausging.
+      summary: g.status === 'finished'
+        ? { own: summarize(g, i), foe: summarize(g, 1 - i) }
         : null
     });
   }

@@ -435,3 +435,28 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
 
 /* Angehaltene Partie: die Uhr steht, das muss man sehen. */
 #clock.paused{color:var(--accent);border-color:var(--accent)}
+
+/* ------------------------------------------------ Täuschungsbilanz (Ende)
+   Was die Köder, das Tauchen und die Manöver bewirkt haben. Steht bewusst
+   ueber den aufgedeckten Flotten: das Brett zeigt, WO die Schiffe lagen -
+   die Bilanz zeigt, WARUM die Partie so ausging. */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:14px;margin:14px 0 4px}
+.summary h4{margin:0 0 6px;font-size:12px;color:var(--accent);font-weight:700;
+  text-transform:uppercase;letter-spacing:.08em}
+.summary-list{list-style:none;padding:0;margin:0;font-size:13px;color:var(--muted)}
+.summary-list li{padding:5px 0 5px 14px;position:relative;line-height:1.45}
+.summary-list li::before{content:"›";position:absolute;left:0;color:var(--line)}
+.summary-list b{color:var(--ink)}
+
+/* Kopfzeile hochkant: Titel, Programmstand, Ton und Feedback passen zusammen
+   nicht auf 393px. Weg kann nur die Meldung "verbunden" - sie sagt im
+   Normalfall nichts. Der Stoerfall bleibt sichtbar, denn der sagt viel. */
+@media(max-width:779px){
+  header{gap:6px;padding:10px}
+  /* Der Titel ist Schmuck, Programmstand und die beiden Knoepfe sind Funktion.
+     Also gibt der Titel nach: kleiner und enger gesetzt. */
+  h1{min-width:0;font-size:15px;letter-spacing:.06em}
+  .conn:not(.down){display:none}
+  .conn.down{color:var(--hit)}
+}

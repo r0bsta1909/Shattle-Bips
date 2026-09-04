@@ -77,7 +77,13 @@ function makeDoc() {
       this.children = [];
       this._text = String(v).replace(/<[^>]*>/g, '');
     }
-    get innerHTML() { return this._text; }
+    get innerHTML() {
+      // Wie im Browser: der Inhalt umfasst die Kinder. Vorher gab der Getter
+      // nur den eigenen Text zurueck - ein ueber createElement/appendChild
+      // aufgebauter Baum sah damit LEER aus. Ein Test darauf waere bestanden,
+      // obwohl im Browser etwas steht: der Pruefstand haette gelogen.
+      return this._text + this.children.map((c) => c.innerHTML).join('');
+    }
     _unregister() {
       for (const c of this.children) c._unregister();
       if (this._id && byId.get(this._id) === this) byId.delete(this._id);
@@ -572,4 +578,49 @@ test('Aufklärung und Ausweichen blenden ein', async () => {
   feed({ t: 'notice', kind: 'evaded' });
   assert.match(byId.get('flash').innerHTML, /ausgewichen/);
   assert.ok(byId.get('flash')._classes.has('bad'));
+});
+
+// ------------------------------------------------------ Täuschungsbilanz
+test('Bilanz erscheint am Partieende und übersetzt die Kennzahlen', async () => {
+  const { byId, feed } = await bootClient();
+  const m = stateMsg();
+  feed(m);
+  const reveal = { own: m.own, foe: m.own };
+  feed(stateMsg({
+    status: 'finished', winner: 0, endReason: 'allSunk', reveal,
+    summary: {
+      own: [{ key: 'decoyEaten', value: 7, of: 28 }, { key: 'maneuver', value: 3, saved: 2, ships: 1 }],
+      foe: [{ key: 'evaded', value: 2, cells: 3 }]
+    }
+  }));
+
+  const html = byId.get('end-summary').innerHTML;
+  assert.match(html, /7/, 'die geschluckten Schüsse stehen da');
+  assert.match(html, /25 ?%/, 'als Anteil ausgerechnet');   // 7 von 28
+  assert.match(html, /gerettet/, 'die Manöver-Rettung wird benannt');
+  assert.match(html, /ausgewichen/, 'und die Gegenseite auch');
+});
+
+test('Bilanz verschluckt unbekannte Kennzahlen nicht', async () => {
+  // Der Server soll eine Kennzahl ergaenzen koennen, ohne dass der Client im
+  // selben Zug mitzieht - sonst muss man immer beide Seiten anfassen.
+  const { byId, feed } = await bootClient();
+  const m = stateMsg();
+  feed(m);
+  feed(stateMsg({
+    status: 'finished', winner: 0, endReason: 'allSunk', reveal: { own: m.own, foe: m.own },
+    summary: { own: [{ key: 'ganzNeu', value: 42 }], foe: [] }
+  }));
+  assert.match(byId.get('end-summary').innerHTML, /ganzNeu.*42/,
+    'unbekannter Schlüssel wird roh gezeigt');
+});
+
+test('Ohne Bilanz bleibt der Block leer statt zu werfen', async () => {
+  const { byId, feed } = await bootClient();
+  const m = stateMsg();
+  feed(m);
+  assert.doesNotThrow(() => feed(stateMsg({
+    status: 'finished', winner: 0, endReason: 'allSunk', reveal: { own: m.own, foe: m.own }
+  })));
+  assert.equal(byId.get('end-summary').innerHTML, '', 'leer, nicht kaputt');
 });

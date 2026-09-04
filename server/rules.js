@@ -310,6 +310,7 @@ export function applyDive(game, slot) {
   if (!s || s.hits.length > 0) return { ok: false, error: 'U-Boot beschädigt oder versenkt.' };
   p.diving = true;
   p.divedThisTurn = true;
+  game.log.push({ turn: game.turnCount, slot, kind: 'dive' });
   return { ok: true };
 }
 
@@ -344,11 +345,14 @@ export function applyManeuver(game, slot, shipIndex, move) {
     if (others.has(i)) return { ok: false, error: 'Zielposition berührt ein anderes Objekt.' };
   }
 
+  const from = ship.cells.slice();
   ship.cells = cells;
   ship.horiz = horiz;
   ship.movedTurn = game.turnCount;
   p.lastSalvoHit = false;
-  game.log.push({ turn: game.turnCount, slot, kind: 'maneuver' });
+  // `from` ist der Kern der Manoever-Bilanz: erst damit laesst sich hinterher
+  // pruefen, ob ein spaeterer Schuss das Schiff getroffen HAETTE.
+  game.log.push({ turn: game.turnCount, slot, kind: 'maneuver', shipType: ship.type, from, to: cells.slice() });
   endTurn(game);
   return { ok: true, notice: 'maneuvered' };
 }
@@ -375,6 +379,7 @@ export function applyScan(game, slot, center) {
   }
   p.scannedThisTurn = true;
   p.scans.push({ center, count, turn: game.turnCount });
+  game.log.push({ turn: game.turnCount, slot, kind: 'scan', center, count });
   return { ok: true, count };
 }
 
@@ -468,7 +473,7 @@ export function applySalvo(game, slot, shots) {
   }
 
   p.lastSalvoHit = results.some((x) => x.result === 'hit' || x.result === 'sunk');
-  game.log.push({ turn: game.turnCount, slot, kind: 'salvo', results });
+  game.log.push({ turn: game.turnCount, slot, kind: 'salvo', results, evaded, reset: evaded ? waterCells.slice() : [] });
 
   if (allSunk(foe)) {
     game.status = 'finished';
@@ -497,4 +502,66 @@ export function ownView(p) {
     decoys: p.decoys.map((d) => ({ cells: d.cells, hits: d.hits, horiz: d.horiz })),
     incoming: [...p.incoming]
   };
+}
+
+// ----------------------------------------------------- Täuschungsbilanz
+/**
+ * Was hat die Täuschung dieses Spielers bewirkt?
+ *
+ * Rein aus `game.log` und den Flotten gerechnet – waehrend der Partie wird
+ * dafuer nichts mitgefuehrt. Das ist Absicht: das Protokoll ist die eine
+ * Wahrheit, jede Kennzahl ist eine Leseart davon. Wer eine ergaenzen will,
+ * haengt hier einen Eintrag an und muss die Spielschleife nicht anfassen.
+ *
+ * Jeder Eintrag: `{ key, value, ...Zusatz }`. Kennzahlen ohne Aussage fallen
+ * raus – eine Bilanz aus lauter Nullen sagt weniger als eine kurze. Der Client
+ * zeigt einen unbekannten `key` roh an, statt ihn zu verschlucken; so kann der
+ * Server hier vorlegen, ohne dass der Client im selben Zug mitziehen muss.
+ */
+export function summarize(game, slot) {
+  const me = game.players[slot];
+  if (!me) return [];
+  const log = game.log || [];
+  const gegnerSalven = log.filter((e) => e.kind === 'salvo' && e.slot === 1 - slot);
+  const schuesse = gegnerSalven.reduce((n, e) => n + e.results.length, 0);
+  const out = [];
+
+  // Köder: wie viele gegnerische Schüsse haben sie geschluckt?
+  if (me.decoys.length) {
+    out.push({ key: 'decoyEaten', value: me.decoys.reduce((n, d) => n + d.hits.length, 0), of: schuesse });
+  }
+
+  // Ausweichen: gegnerische Salven, in denen das U-Boot getaucht war, und wie
+  // viele Wasser-Meldungen dadurch verfielen.
+  const ausgewichen = gegnerSalven.filter((e) => e.evaded);
+  if (ausgewichen.length) {
+    out.push({
+      key: 'evaded',
+      value: ausgewichen.length,
+      cells: ausgewichen.reduce((n, e) => n + (e.reset ? e.reset.length : 0), 0)
+    });
+  }
+
+  // Manöver: hat es ein Schiff aus einem späteren Schuss gezogen? Der Beweis
+  // steht im Protokoll – die alten Felder gegen jeden danach abgegebenen
+  // gegnerischen Schuss halten. Nur `water` zaehlt: haette der Schuss etwas
+  // getroffen, war das Feld nicht leer und das Manöver hat nichts gerettet.
+  const manoever = log.filter((e) => e.kind === 'maneuver' && e.slot === slot);
+  if (manoever.length) {
+    let gerettet = 0;
+    const schiffe = new Set();
+    for (const m of manoever) {
+      const alt = new Set(m.from || []);
+      const treffer = new Set();
+      for (const e of gegnerSalven) {
+        if (e.turn <= m.turn) continue;
+        for (const r of e.results) if (alt.has(r.cell) && r.result === 'water') treffer.add(r.cell);
+      }
+      if (treffer.size) { gerettet += treffer.size; schiffe.add(m.shipType); }
+    }
+    out.push({ key: 'maneuver', value: manoever.length, saved: gerettet, ships: schiffe.size });
+  }
+
+  if (me.scans.length) out.push({ key: 'scan', value: me.scans.length });
+  return out;
 }

@@ -140,6 +140,28 @@ Nützlich dabei: `display:contents` auf einem Zwischenbehälter gibt dessen Kind
 ab, sodass sie einzeln in Flächen gesetzt werden können — mit `display:block` davor als
 Rückfall, dasselbe Muster wie bei `--cs`.
 
+### Ein Effekt kommt selten allein — Ereignisstrom statt Streuung
+Die Einblendung war in die Nachrichtenzweige eingestreut. Als der Ton dazukam, hätte er
+dieselben sechs Stellen gebraucht — und die nächste Sache (Notizen, Haptik, Statistik) wieder.
+
+**Regel:** Sobald ein **zweiter** Effekt auf dieselben Vorgänge reagiert, gehört dazwischen ein
+Ereignisstrom: `emit('sunk', …)` dort, wo es passiert, `onEvent(…)` je Effekt. Jeder Verbraucher
+läuft in seinem eigenen `try` — ein kaputter Ton darf nicht das Brett lahmlegen.
+
+Dasselbe serverseitig: `game.log` ist die eine Wahrheit, jede Kennzahl ist eine **Leseart**
+davon. Deshalb rechnet `summarize()` die Täuschungsbilanz aus dem Protokoll, statt während der
+Partie mitzuzählen — eine neue Kennzahl fasst die Spielschleife nicht mehr an.
+
+### Ein Bildschirmfoto kann enger sein als die Wirklichkeit
+`tools/shot.mjs` zeigte hochkant ein Bild, in dem Kopfzeile, Reiter und Brett rechts
+abgeschnitten waren. Ich hätte beinahe CSS repariert, das nie kaputt war.
+
+**Ursache:** Chrome erzwingt für `--window-size` eine Mindestbreite und rendert dann breiter,
+als das Bild hinterher groß ist — ein 375px-Foto zeigte ein 412px-Layout.
+**Regel:** Die Seite läuft im Prüfstand in einem `<iframe>` genau der gewünschten Größe; dessen
+Breite *ist* der Viewport, unabhängig vom Fenster. Und generell: bevor man einem Messwerkzeug
+glaubt, einmal etwas messen, dessen Ergebnis man schon kennt.
+
 ### Layout ist doch prüfbar — Chrome ist schon da
 Hier stand lange „Layout-Geometrie ist statisch nicht prüfbar, der Beweis ist das Gerät".
 Das stimmt für *Tests*, war aber die falsche Schlussfolgerung für die *Arbeit*: jede Runde

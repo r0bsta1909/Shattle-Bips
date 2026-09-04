@@ -386,3 +386,59 @@ test('Beide Flotten zeigen ihre Restschiffe, die Aufstellungsregel steht einmal'
   assert.match(desktopCss, /\.fleet-cols > div\{[^}]*text-align:center/,
     'jede Flotte ist für sich zentriert');
 });
+
+// ------------------------------------------------------- Ereignisstrom
+test('Effekte hängen am Ereignisstrom, nicht an den Nachrichtenzweigen', () => {
+  // Der Sinn des Umbaus: ein weiterer Effekt (Ton, spaeter Notizen, Haptik)
+  // soll EINE Zeile kosten - nicht eine Suche durch alle Nachrichtenzweige.
+  assert.match(app, /function emit\(/, 'es gibt einen Ereignisstrom');
+  assert.match(app, /const onEvent = /, 'und einen Weg, sich anzuhängen');
+
+  // Die Einblendung wird nur noch aus ihrem Verbraucher heraus ausgeloest.
+  // Bliebe irgendwo ein direkter Aufruf stehen, waere der Strom nicht die
+  // eine Quelle und der naechste Effekt wuerde dort wieder vergessen.
+  const aufrufe = [...app.matchAll(/(?<!function )\bflash\(/g)].length;
+  assert.equal(aufrufe, 1, 'genau ein Aufruf – der im Verbraucher');
+  assert.match(app, /onEvent\(\(kind, d\) => \{ const f = FLASH_TEXTE\[kind\]/,
+    'und der hängt am Strom');
+
+  // Ein kaputter Effekt darf die anderen nicht mitreissen.
+  assert.match(app, /try \{ fn\(kind, data\); \} catch/,
+    'jeder Effekt läuft für sich');
+});
+
+test('Ton kommt aus Oszillatoren, nicht aus Dateien', () => {
+  // Das Projekt hat keinen Build-Schritt und liefert keine Assets aus.
+  assert.match(app, /createOscillator\(\)/, 'Klang wird erzeugt');
+  assert.ok(!/\.(mp3|ogg|wav|m4a)/i.test(app), 'keine Tondateien');
+  assert.ok(!/new Audio\(/.test(app), 'kein Datei-Abspieler');
+
+  // Jede Einblendung hat auch einen Klang: was auffaellt, soll man auch hoeren
+  // koennen, ohne hinzusehen.
+  const flashKeys = [...(/const FLASH_TEXTE = \{([\s\S]*?)\n\};/.exec(app)?.[1] || '')
+    .matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1]);
+  const klangKeys = [...(/const KLAENGE = \{([\s\S]*?)\n\};/.exec(app)?.[1] || '')
+    .matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1]);
+  assert.ok(flashKeys.length >= 5, `Einblendungen gefunden: ${flashKeys.join(', ')}`);
+  const ohneKlang = flashKeys.filter((k) => !klangKeys.includes(k));
+  assert.deepEqual(ohneKlang, [], `ohne Klang: ${ohneKlang.join(', ')}`);
+});
+
+test('Ton lässt sich abschalten und merkt sich das', () => {
+  assert.ok(present.has('btn-sound'), 'Schalter in der Kopfzeile');
+  assert.match(app, /localStorage\.setItem\('nebel\.ton'/, 'Zustand wird gemerkt');
+  assert.match(app, /localStorage\.getItem\('nebel\.ton'\) !== 'aus'/,
+    'und beim Laden gelesen – Standard ist an');
+  // Browser lassen Ton erst nach einer Nutzergeste zu. Ohne resume bliebe es
+  // nach dem ersten Laden stumm, ohne dass jemand etwas falsch gemacht hat.
+  assert.match(app, /ctx\.state === 'suspended'/, 'Kontext wird nachgezogen');
+});
+
+test('Das Orakel spricht im Funkverkehr', () => {
+  // Der Kern des Spiels: geantwortet wird von einer Instanz, die nie luegt -
+  // getaeuscht wird ueber wahre Meldungen. Wenn im Protokoll "Du" steht,
+  // geht diese Fiktion verloren.
+  assert.match(app, /<i>Orakel<\/i> → \$\{coord\(r\.cell\)\}/, 'Schussmeldungen kommen vom Orakel');
+  assert.ok(!/<i>Du<\/i> → \$\{coord\(r\.cell\)\}/.test(app), 'nicht mehr von „Du“');
+  assert.match(app, /gelogen wurde nicht/, 'beim Ausweichen wird es ausgesprochen');
+});

@@ -7,6 +7,45 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-04 (Fortsetzung) · Täuschungsbilanz und Ton — beide am Ereignisstrom
+
+Aus der Frage nach dem USP. Befund: **der USP fehlt nicht, er ist unsichtbar.** Köder, Tauchen
+und Manöver arbeiten mechanisch (die Simulation zeigt, dass sie dem Zurückliegenden helfen),
+aber der Spieler erfährt nie, dass seine Täuschung gewirkt hat. Deshalb *spielt* sich das
+Spiel wie Standard-Schiffeversenken mit mehr Knöpfen.
+
+**Gebaut — beides als Verbraucher derselben Sache, damit Späteres nur andockt**
+- **Server:** `game.log` ist jetzt vollständig (Tauchen und Aufklärung wurden gar nicht
+  protokolliert; Manöver ohne alte Position; Salven ohne `evaded`). `summarize()` liest die
+  Täuschungsbilanz daraus — **während der Partie wird nichts mitgezählt**. Eine neue Kennzahl
+  ist ein Eintrag in einer Liste, die Spielschleife bleibt unberührt.
+- **Client:** ein **Ereignisstrom** (`emit`/`onEvent`). Die Einblendung hängt jetzt daran statt
+  in sechs Nachrichtenzweigen zu stehen; der Ton ist der zweite Verbraucher, Notizen wären der
+  dritte. Jeder Effekt läuft in seinem eigenen `try`.
+- **Ton** aus reinen Oszillatoren — keine Dateien, passend zum Projekt ohne Build-Schritt.
+  Sonar-Ping für die Aufklärung, Schlag für Treffer, absackender Ton fürs Versenken. Schalter
+  in der Kopfzeile, Zustand unter `nebel.ton` gemerkt.
+- **Stimme des Orakels** im Funkverkehr: Antworten kommen vom Orakel, nicht von „Du" — und
+  beim Ausweichen steht ausdrücklich da, dass nicht gelogen wurde.
+
+**Der interessanteste Wert:** „Deine Manöver haben 2 Schüsse ins Leere gezogen." Das ist
+berechenbar, weil das Protokoll die alte Position kennt — ein Satz, den keine andere
+Schiffeversenken-App sagen kann.
+
+**Gelernt**
+- Zwei meiner vier Gegenproben liefen zuerst **nicht** an: die Tests deckten die Zeitordnung
+  und die Wasser-Bedingung in `summarize()` gar nicht ab. Beide Fälle brauchten Aufbauten, die
+  man erst konstruieren muss (getauchtes U-Boot; ein Schiff, das zurückwandert).
+- `tools/shot.mjs` **log** hochkant: Chrome erzwingt eine Mindestfensterbreite und rendert
+  breiter, als das Bild groß ist — ein 375px-Foto zeigte ein 412px-Layout. Jetzt läuft die
+  Seite in einem `<iframe>` exakter Größe. Ich hätte beinahe CSS repariert, das nie kaputt war.
+- Das Mini-DOM gab bei `innerHTML` nur den eigenen Text zurück; ein über `createElement`
+  aufgebauter Baum sah leer aus. **Prüfstand repariert, nicht Test** — wie die Regel es sagt.
+
+**Offen**
+- Brainstorming zu Notizschicht (#2) und Wiederkehr (#3). Vorgabe des Nutzers: Handarbeit,
+  die das System auch könnte, ist keine Spieltiefe — Hinhören/Hinsehen muss **belohnt** werden.
+
 ## 2026-09-04 (Fortsetzung) · Kommandozentrale, zentrierte Titel — und ein Renderer
 
 **Das Wichtigste zuerst: `tools/shot.mjs`.** Chrome headless rendert das echte Markup mit dem

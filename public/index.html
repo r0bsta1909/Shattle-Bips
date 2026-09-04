@@ -12,6 +12,7 @@
 <header>
   <h1>Shattle Bips <span id="version" class="version" title="Programmstand">…</span></h1>
   <span id="conn" class="conn">verbinde…</span>
+  <button id="btn-sound" class="ghost" type="button" title="Ton an/aus" aria-label="Ton an oder aus">🔊</button>
   <button id="btn-feedback" class="ghost" type="button">Feedback</button>
 </header>
 
@@ -214,6 +215,10 @@
       <button id="btn-quit">Beenden</button>
     </div>
     <p id="rematch-hint" class="hint"></p>
+    <!-- Täuschungsbilanz: was die Köder, das Tauchen und die Manöver bewirkt
+         haben. Der Server rechnet sie aus dem Partieprotokoll, hier steht nur
+         die Hülle. -->
+    <div id="end-summary" class="summary"></div>
     <div class="reveal-wrap">
       <div class="board-col"><h3>Gegnerische Flotte</h3><div id="reveal-foe" class="grid own"></div></div>
       <div class="board-col"><h3>Deine Flotte</h3><div id="reveal-own" class="grid own"></div></div>

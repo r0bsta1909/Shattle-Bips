@@ -103,17 +103,34 @@ const arbeit = mkdtempSync(path.join(tmpdir(), 'shattle-shot-'));
 const datei = path.join(arbeit, 'seite.html');
 writeFileSync(datei, seite());
 
+/*
+ * Die Seite laeuft in einem Rahmen GENAU der gewuenschten Groesse.
+ *
+ * Warum nicht einfach --window-size: Chrome legt darunter eine Mindestbreite
+ * fest und rendert dann breiter, als das Bild hinterher gross ist. Ein
+ * 375px-Foto zeigte in Wahrheit ein 412px-Layout - alles sah zu eng aus, und
+ * wer dem Bild glaubt, repariert Fehler, die es nicht gibt. Ein <iframe> hat
+ * dagegen exakt die gesetzte Breite als Viewport, egal wie gross das Fenster
+ * ist. Deshalb ist das Fenster absichtlich groesser: der Rand ausserhalb des
+ * Rahmens gehoert nicht zur Seite.
+ */
+const rahmen = path.join(arbeit, 'rahmen.html');
+writeFileSync(rahmen, `<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;background:#000}
+iframe{display:block;width:${breite}px;height:${hoehe}px;border:0;margin:12px}</style>
+<iframe src="seite.html"></iframe>`);
+
 execFileSync(chrome, [
   '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
   // Eigenes Profil je Lauf: zwei Chrome-Aufrufe hintereinander streiten sich
   // sonst um die Sperre im Profilordner und der zweite schreibt kein Bild.
   `--user-data-dir=${path.join(arbeit, 'profil')}`,
-  `--window-size=${breite},${hoehe}`,
+  `--window-size=${Math.max(breite + 24, 560)},${hoehe + 24}`,
   '--virtual-time-budget=4000',
   // Vorwaertsschraegstriche auch unter Windows: mit Backslashes schreibt
   // Chrome das Bild wortlos nicht.
   `--screenshot=${path.resolve(ziel).replace(/\\/g, '/')}`,
-  `file:///${datei.replace(/\\/g, '/')}`
+  `file:///${rahmen.replace(/\\/g, '/')}`
 ], { stdio: 'ignore' });
 
 console.log(`${ziel}  (${breite}x${hoehe}, ${modus})`);
