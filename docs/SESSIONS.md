@@ -7,7 +7,7 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
-## 2026-09-04 · Spieltisch für den PC
+## 2026-09-04 · `834e968` + `a635d01` · Spieltisch für den PC
 
 Aus einem Screenshot vom PC. Der Nutzer bestätigt Mobil („sieht wirklich gut aus"), meldet
 aber: „am pc ist es dafür unbrauchbar geworden". Der Umbau aus Runde 3 hatte den PC zerlegt,
@@ -24,6 +24,10 @@ aber: „am pc ist es dafür unbrauchbar geworden". Der Umbau aus Runde 3 hatte 
 - Kacheln am PC bis **52px** (vorher 34): `(100vw − 470px)/20`, weil sich zwei Bretter die
   Breite teilen. Aufstellung wächst mit (bis 44px), sonst stellt man klein auf und spielt groß.
 - Einblendung liegt am PC **über dem Gegnerbrett** statt in der Bildmitte.
+- Nachtrag `a635d01`: Brettspalte auf `calc(var(--cs)*10+41px)` festgelegt. Als `max-content`
+  hätte ein langer Gegnername („Gegner: … [5 Schiffe]" ≈ 250px) die Spalte auf Fenstern bis
+  852px breiter gemacht als ihr Brett (241px) — und zentriert läuft ein Überhang nach links
+  aus dem Bild, wohin man nicht scrollen kann. Dazu `justify-content:safe center`.
 
 **Gelernt**
 - Eine Regel für den engsten Fall (`min-width:0`, damit vier Knöpfe auf ein Telefon passen)
