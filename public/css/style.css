@@ -263,13 +263,23 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
   .screen#screen-game.active{
     max-width:none;              /* zwei Bretter passen nicht in 1100px */
     position:relative;           /* Bezug fuer die Einblendung */
-    justify-content:center;      /* Rest der Breite links und rechts */
+    justify-content:safe center; /* Rest der Breite links und rechts */
     grid-template-columns:max-content max-content minmax(200px,300px);
     grid-template-rows:auto auto;
     grid-template-areas:
       "foe  own  ctrl"
       "info info log";
   }
+  /* Jede Brettspalte ist genau so breit wie ihr Brett. Ohne die Angabe misst
+     `max-content` die Ueberschrift ungebrochen mit: "Gegner: <16 Zeichen>
+     [5 Schiffe]" sind rund 250px und damit auf schmalen Fenstern breiter als
+     das Brett selbst (bei 20px-Kacheln 241px). Die Spalte waere dann breiter
+     als noetig - und mit zentriertem Raster liefe der Ueberhang nach links aus
+     dem Bild, wohin man nicht scrollen kann.
+     10*cs + 41: neun Luecken a 2, Rasterrand 2x2, Achsenstreifen 16, Rahmen 3. */
+  #pane-foe > .board-col,
+  #pane-own > .board-col{width:calc(var(--cs) * 10 + 41px)}
+
   #pane-foe > .board-col{grid-area:foe}
   #pane-own > .board-col{grid-area:own}
   #pane-own > .info     {grid-area:info}

@@ -239,6 +239,12 @@ test('Am PC stehen beide Bretter nebeneinander', () => {
     'keine auto-Spalte mehr, die der Bedienung den Platz wegnimmt');
   const cols = /grid-template-columns:([^;]+);/.exec(desktopCss);
   assert.match(cols[1], /minmax\(/, 'die Bedienspalte hat eine Untergrenze');
+
+  // Sonst misst max-content die Ueberschrift ungebrochen mit: ein langer
+  // Gegnername macht die Spalte breiter als ihr Brett, und der Ueberhang
+  // laeuft bei zentriertem Raster nach links aus dem Bild.
+  assert.match(desktopCss, /\.board-col\{width:calc\(var\(--cs\) \* 10/,
+    'die Brettspalte ist so breit wie ihr Brett, nicht wie ihre Überschrift');
 });
 
 test('Aktionsknöpfe werden am PC nicht gequetscht', () => {
