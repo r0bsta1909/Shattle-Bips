@@ -31,6 +31,9 @@ const coord = (i) => { const [r, c] = rc(i); return `${String.fromCharCode(65 + 
 let ws = null, myToken = null, myCode = null, mySlot = null, isHost = false;
 let state = null, opts = null, mode = 'normal', selected = new Set();
 let manShip = null, deadline = 0, clockTimer = null;
+// Gegen den Bot wird die Partie beim Verlassen geloescht, gegen Menschen
+// wartet der Verbliebene. Der Unterschied kommt aus der 'joined'-Nachricht.
+let vsBot = false;
 
 // ------------------------------------------------------------------- Netz
 function connect() {
@@ -111,6 +114,7 @@ function handle(m) {
 
     case 'joined':
       myCode = m.code; myToken = m.token; mySlot = m.playerId;
+      vsBot = m.vsBot === true;
       isHost = m.playerId === 0;
       localStorage.setItem('nebel.token', myToken);
       localStorage.setItem('nebel.code', myCode);
@@ -150,6 +154,16 @@ function handle(m) {
       placementLocked = false;
       $('place-status').textContent = 'Aufstellung wieder freigegeben.';
       renderPlacement();
+      break;
+
+    case 'left':
+      // Token und Code loeschen, sonst zieht der naechste Aufruf die gerade
+      // verlassene Partie wieder hoch - genau der Fehler aus Issue #25.
+      localStorage.removeItem('nebel.token');
+      localStorage.removeItem('nebel.code');
+      myToken = null; myCode = null; mySlot = -1; state = null; vsBot = false;
+      closeGone();
+      show('screen-start');
       break;
 
     case 'started':
@@ -236,6 +250,8 @@ function handle(m) {
       if (m.kind === 'incoming') log(`<i>${foeName()}</i> → Beschuss auf ${m.cells.map(coord).join(', ')}.`);
       if (m.kind === 'timeout') log(`<i>${who(m.slot)}</i> → Zug verfallen, Zeit abgelaufen.`);
       if (m.kind === 'rematchDeclined') { closeRematchAsk(); $('rematch-hint').textContent = `${m.by} hat die Revanche abgelehnt.`; }
+      if (m.kind === 'opponentGone') { openGone(m.by, m.seconds); }
+      if (m.kind === 'opponentBack') { closeGone(); log('<b>Der Gegenspieler ist zurück.</b>'); }
       if (m.kind === 'rematchOff') { closeRematchAsk(); $('rematch-hint').textContent = `${m.by} hat die Partie verlassen.`; }
       if (m.kind === 'rematchWanted') openRematchAsk(m.by);
       if (m.kind === 'optionsChanged') {
@@ -615,8 +631,16 @@ function renderFleetLegend() {
 }
 
 function tickClock() {
-  if (!deadline || !state || state.status !== 'playing') return;
-  $('clock').textContent = `${Math.max(0, Math.round((deadline - Date.now()) / 1000))} s`;
+  if (!state || state.status !== 'playing') return;
+  const el = $('clock');
+  if (state.paused) {
+    el.textContent = 'angehalten';
+    el.classList.add('paused');
+    return;
+  }
+  el.classList.remove('paused');
+  if (!deadline) return;
+  el.textContent = `${Math.max(0, Math.round((deadline - Date.now()) / 1000))} s`;
 }
 
 function previewManeuver() {
@@ -842,3 +866,43 @@ for (const t of document.querySelectorAll('.game-tabs .tab')) {
 myToken = localStorage.getItem('nebel.token');
 myCode = localStorage.getItem('nebel.code');
 connect();
+
+// ------------------------------------------------- Partie verlassen (#25)
+// Gegen den Bot ist die Partie danach weg - es gibt niemanden, auf den zu
+// warten waere. Gegen Menschen bekommt der Verbliebene ein Wartefenster und
+// kann selbst gehen, statt vor einem leeren Brett zu sitzen.
+const leaveDialog = $('leave-dialog');
+const goneDialog = $('gone-dialog');
+let goneTimer = null;
+
+$('btn-leave').onclick = () => {
+  $('leave-detail').textContent = vsBot
+    ? 'Die Partie gegen den Bot wird beendet und gelöscht.'
+    : 'Dein Gegenspieler wird benachrichtigt und wartet 30 Sekunden auf deine Rückkehr.';
+  leaveDialog.showModal();
+};
+$('leave-no').onclick = () => leaveDialog.close();
+$('leave-yes').onclick = () => { leaveDialog.close(); send({ t: 'leaveGame' }); };
+
+/** Wartefenster auf den Gegner: laeuft es ab, entscheidet der Server. */
+function openGone(by, seconds) {
+  clearInterval(goneTimer);
+  let rest = seconds || 30;
+  const zeigen = () => {
+    $('gone-text').textContent =
+      `${by || 'Der Gegenspieler'} ist nicht mehr verbunden. Es wird noch ${rest} s auf die Rückkehr gewartet – danach gewinnst du.`;
+    if (rest-- <= 0) clearInterval(goneTimer);
+  };
+  zeigen();
+  goneTimer = setInterval(zeigen, 1000);
+  if (!goneDialog.open) goneDialog.showModal();
+}
+
+function closeGone() {
+  clearInterval(goneTimer);
+  goneTimer = null;
+  if (goneDialog.open) goneDialog.close();
+}
+
+$('gone-wait').onclick = () => goneDialog.close();
+$('gone-leave').onclick = () => { closeGone(); send({ t: 'leaveGame' }); };

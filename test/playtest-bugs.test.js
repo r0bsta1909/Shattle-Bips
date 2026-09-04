@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   createRoom, joinRoom, setOptions, setPlacement, tryStart,
   voteRematch, withdrawPlacement, lobbyState, pushState, closeRoom,
-  declineRematch, markDisconnected
+  declineRematch, markDisconnected, leaveGame, rebind, getRoom
 } from '../server/rooms.js';
 import { randomPlacement, mergeOptions, DEFAULT_OPTIONS, baseSalvo } from '../server/rules.js';
 
@@ -287,4 +287,77 @@ test('#12 Zug-Timeout meldet, wen es betrifft', () => {
   const notice = { t: 'notice', kind: 'timeout', slot: 0 };
   assert.equal(typeof notice.slot, 'number', 'slot ist Teil der Meldung');
   assert.ok(room.slots[0].name, 'und der Name ist bekannt');
+});
+
+// --------------------------------------------------------------- Issue #25
+test('#25 Botpartie laeuft ohne ihren Menschen nicht weiter', () => {
+  const { room, ws } = botGame();
+  assert.equal(room.status, 'playing');
+  assert.ok(room.timer, 'Zugtimer laeuft, solange jemand da ist');
+
+  // Neu geladene Seite: die Verbindung faellt weg. Vorher lief alles weiter -
+  // der Bot zog, die Zugzeit lief ab, und nach zwei verpassten Zuegen stand
+  // man beim Zurueckkommen auf dem Verloren-Bildschirm.
+  markDisconnected(room, 0);
+  assert.equal(room.paused, true, 'Partie ist angehalten');
+  assert.equal(room.timer, null, 'und die Uhr steht');
+  assert.equal(room.game.status, 'playing', 'die Partie ist aber nicht verloren');
+
+  // Zurueck: es geht weiter, wo es aufgehoert hat.
+  const ws2 = fakeWs();
+  const i = rebind(room, room.slots[0].token, ws2);
+  assert.equal(i, 0, 'derselbe Platz');
+  assert.equal(room.paused, false, 'wieder in Gang');
+  assert.ok(room.timer, 'Uhr laeuft wieder');
+});
+
+test('#25 Falsches Token gilt nicht als Wiedereinstieg', () => {
+  const { room } = botGame();
+  // rebind gab frueher null zurueck. Der Aufrufer prueft `i >= 0`, und
+  // `null >= 0` ist WAHR - ein fremdes Token waere durchgegangen.
+  const i = rebind(room, 'voelligFalsch', fakeWs());
+  assert.equal(i, -1);
+  assert.ok(i < 0, 'und die Pruefung des Aufrufers greift');
+});
+
+test('#25 Gegen den Bot verlassen loescht die Partie', () => {
+  const { room } = botGame();
+  const code = room.code;
+  const res = leaveGame(room, 0);
+  assert.equal(res.ok, true);
+  assert.equal(res.closed, true, 'kein Warten - es ist niemand da');
+  assert.equal(getRoom(code), undefined, 'Raum ist weg');
+  open.length = 0;                       // schon geschlossen
+});
+
+test('#25 Gegen Menschen bekommt der Verbliebene ein Wartefenster', () => {
+  const room = newRoom(false);
+  const a = fakeWs(), b = fakeWs();
+  joinRoom(room, 'Rob', a);
+  joinRoom(room, 'Kim', b);
+  setPlacement(room, 0, randomPlacement(Math.random, room.options));
+  setPlacement(room, 1, randomPlacement(Math.random, room.options));
+  tryStart(room);
+  a.sent.length = 0; b.sent.length = 0;
+
+  const res = leaveGame(room, 0);
+  assert.equal(res.closed, false, 'der Raum bleibt, es wird gewartet');
+  assert.ok(kinds(b).includes('opponentGone'), 'der Verbliebene wird informiert');
+  const meldung = b.sent.find((m) => m.kind === 'opponentGone');
+  assert.equal(meldung.by, 'Rob', 'mit Namen');
+  assert.equal(meldung.seconds, 30, 'und mit der Wartezeit');
+  assert.equal(room.paused, true, 'die Uhr steht, solange gewartet wird');
+  assert.ok(room.graceUntil > Date.now(), 'das Fenster laeuft');
+
+  // Der Zustand muss es auch tragen, sonst zaehlt die Uhr im Client weiter.
+  const z = lastState(b);
+  assert.equal(z.paused, true);
+  assert.ok(z.graceUntil > 0);
+
+  // Der Verbliebene darf selbst gehen - dann ist der Raum weg.
+  const code = room.code;
+  const res2 = leaveGame(room, 1);
+  assert.equal(res2.closed, true);
+  assert.equal(getRoom(code), undefined);
+  open.length = 0;
 });

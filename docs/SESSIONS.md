@@ -37,9 +37,17 @@ drei Runden Nachrechnen nicht geklärt hatten.
 - **Mobil ist beweisbar unberührt:** dieselbe Ansicht vor und nach dem Umbau hochkant
   gerendert und verglichen — Pixel für Pixel identisch.
 
-**Offen**
-- Issue #25: Bot-Partie läuft nach Neuladen im Hintergrund weiter; „Zurück zur Lobby"-Knopf;
-  Reconnect-Fenster für Menschen-Partien.
+**Issue #25 im selben Zug erledigt**
+- **Der Fehler:** eine Bot-Partie lief ohne ihren Menschen weiter. Wer neu lud, kam auf dem
+  Verloren-Bildschirm heraus — der Bot hatte gezogen, die Zugzeit war zweimal abgelaufen.
+  Jetzt hält der Raum an, sobald kein Mensch mehr verbunden ist, und läuft beim
+  Wiedereinstieg weiter. `paused`/`graceUntil` stehen im Zustand, damit die Uhr im Client
+  nicht weiterzählt, während serverseitig nichts passiert.
+- **„Partie verlassen"** in der Kommandozentrale, mit Rückfrage. Gegen den Bot ist die Partie
+  danach gelöscht; gegen Menschen wird der Verbliebene informiert und bekommt **30 s**
+  Wartefenster als Dialog mit Countdown — samt eigener Möglichkeit zu gehen.
+- **Nebenfund:** `rebind` gab `null` zurück, der Aufrufer prüft `i >= 0` — und `null >= 0` ist
+  **wahr**. Ein fremdes Token wäre als geglückter Wiedereinstieg durchgegangen. Jetzt `-1`.
 
 ## 2026-09-04 (Fortsetzung) · Mittelspalte ohne Lücke, Bot-Bedenkzeit
 

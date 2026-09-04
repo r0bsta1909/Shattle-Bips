@@ -196,6 +196,9 @@
       <button id="btn-maneuver-cancel">Abbrechen</button>
     </div>
     <p id="game-error" class="error"></p>
+    <!-- Aus einer laufenden Partie herausfinden (Issue #25). Klein
+         gehalten: hochkant kostet jede Zeile Brettflaeche. -->
+    <button id="btn-leave" class="ghost leave-btn" type="button">Partie verlassen</button>
   </div>
   </div><!-- .mid -->
 </section>
@@ -228,6 +231,26 @@
   <div class="row stack">
     <button id="rematch-accept" class="primary">Annehmen</button>
     <button id="rematch-decline">Ablehnen</button>
+  </div>
+</dialog>
+
+<!-- ------------------------------------------------- Partie verlassen -->
+<dialog id="leave-dialog" class="sheet">
+  <h2>Partie verlassen?</h2>
+  <p id="leave-detail" class="hint">—</p>
+  <div class="row stack">
+    <button id="leave-yes" class="primary">Verlassen</button>
+    <button id="leave-no">Weiterspielen</button>
+  </div>
+</dialog>
+
+<!-- ------------------------------------------------------ Gegner weg -->
+<dialog id="gone-dialog" class="sheet">
+  <h2>Gegner ist weg</h2>
+  <p id="gone-text" class="hint">—</p>
+  <div class="row stack">
+    <button id="gone-wait" class="primary">Warten</button>
+    <button id="gone-leave">Partie verlassen</button>
   </div>
 </dialog>
 

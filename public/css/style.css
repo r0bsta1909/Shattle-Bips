@@ -232,7 +232,7 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
 @media(max-width:779px){
   /* Hochkant kostet die feste Ansicht mehr Hoehe als quer: Kopfzeile 64
      + Umschalter 48 + Ueberschrift 26 + Bedienleiste ~152 + Raender ~40. */
-  :root{--cs:clamp(22px, min((100vw - 100px) / 10, (100dvh - 330px) / 10), 34px)}
+  :root{--cs:clamp(22px, min((100vw - 100px) / 10, (100dvh - 368px) / 10), 34px)}
 
   .screen#screen-game.active{
     display:grid;
@@ -404,7 +404,7 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
    Spielbildschirm binden 72px statt 100px: rund 10 % groessere Felder. */
 #screen-game{--cs:clamp(24px, min((100vw - 72px) / 10, (100dvh - 200px) / 10), 34px)}
 @media(max-width:779px){
-  #screen-game{--cs:clamp(22px, min((100vw - 72px) / 10, (100dvh - 330px) / 10), 34px)}
+  #screen-game{--cs:clamp(22px, min((100vw - 72px) / 10, (100dvh - 368px) / 10), 34px)}
 }
 
 /* Am PC teilen sich ZWEI Bretter die Breite - daher /20 statt /10.
@@ -424,3 +424,14 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
   #screen-game{--cs:clamp(20px, min((100vw - 470px) / 20, (100dvh - 340px) / 10), 52px)}
   #screen-placement{--cs:clamp(24px, min((100vw - 400px) / 10, (100dvh - 260px) / 10), 44px)}
 }
+
+/* Partie verlassen: bewusst ein Geisterknopf am Rand. Hochkant ist die
+   Spielansicht genau schirmhoch, jede Zeile geht vom Brett ab - deshalb klein
+   und rechtsbuendig statt als breiter Knopf. */
+.leave-btn{display:block;margin:8px 0 0 auto;width:auto;
+  min-height:32px;padding:5px 11px;font-size:12px;
+  background:transparent;border-color:var(--line);color:var(--muted)}
+.leave-btn:hover{color:var(--ink);border-color:var(--hit)}
+
+/* Angehaltene Partie: die Uhr steht, das muss man sehen. */
+#clock.paused{color:var(--accent);border-color:var(--accent)}

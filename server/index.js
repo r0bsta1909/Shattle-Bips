@@ -9,7 +9,7 @@ import { WebSocketServer } from 'ws';
 import {
   createRoom, getRoom, joinRoom, rebind, pushLobby, pushState,
   setPlacement, tryStart, doSalvo, doManeuver, doDive, doScan,
-  sweep, roomCount, randomPlacementForClient, lobbyState, setOptions, voteRematch, withdrawPlacement, declineRematch, markDisconnected
+  sweep, roomCount, randomPlacementForClient, lobbyState, setOptions, voteRematch, withdrawPlacement, declineRematch, markDisconnected, leaveGame
 } from './rooms.js';
 import { VERSION } from './version.js';
 import { submitFeedback, sweepLimits, feedbackStatus, readMemory, diagnose, explain } from './feedback.js';
@@ -180,6 +180,20 @@ wss.on('connection', (ws) => {
           const r = setOptions(ctx.room, ctx.slot, m.options);
           if (!r.ok) return fail(ws, r.error);
           return pushLobby(ctx.room);
+        }
+
+        case 'leaveGame': {
+          if (!ctx.room) return fail(ws, 'Keine Lobby.');
+          const room = ctx.room;
+          const r = leaveGame(room, ctx.slot);
+          if (!r.ok) return fail(ws, r.error);
+          // Der Platz bleibt bestehen, solange gewartet wird - aber diese
+          // Verbindung gehoert nicht mehr dazu, sonst schiebt ein spaeteres
+          // 'close' den Raum noch einmal an.
+          ctx.room = null; ctx.slot = -1;
+          ws.send(JSON.stringify({ t: 'left', closed: r.closed === true }));
+          if (!r.closed) { pushLobby(room); pushState(room); }
+          return;
         }
 
         case 'rematch': {

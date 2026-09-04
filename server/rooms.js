@@ -14,6 +14,9 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // ohne I,O,0,1
 const BANK_MS = 0;   // Zeitbank standardmaessig aus: Timeout gibt den Zug ab
 const PLACEMENT_MS = 180_000;
 const ROOM_TTL_MS = 45 * 60_000;
+// Wartefenster auf die Rueckkehr eines Menschen, bevor die Partie ihm
+// abgenommen wird (Issue #25).
+const GRACE_MS = 30_000;
 
 const rooms = new Map();
 
@@ -50,6 +53,9 @@ export function createRoom(vsBot = false) {
     deadline: 0,
     options: { ...DEFAULT_OPTIONS },
     rematchVotes: new Set(),
+    paused: false,
+    graceTimer: null,
+    graceUntil: 0,
     vsBot
   };
   rooms.set(code, room);
@@ -66,6 +72,7 @@ export const getRoom = (code) => rooms.get(String(code || '').toUpperCase());
 export function closeRoom(room) {
   if (!room) return;
   if (room.timer) { clearTimeout(room.timer); room.timer = null; }
+  if (room.graceTimer) { clearTimeout(room.graceTimer); room.graceTimer = null; }
   rooms.delete(room.code);
 }
 
@@ -73,6 +80,7 @@ export function sweep() {
   for (const [code, room] of rooms) {
     if (now() - room.createdAt > ROOM_TTL_MS) {
       if (room.timer) clearTimeout(room.timer);
+      if (room.graceTimer) clearTimeout(room.graceTimer);
       rooms.delete(code);
     }
   }
@@ -135,10 +143,82 @@ export function withdrawPlacement(room, slotIndex) {
 
 export function rebind(room, playerToken, ws) {
   const i = room.slots.findIndex((s) => s && s.token === playerToken);
-  if (i < 0) return null;
+  // -1 statt null: der Aufrufer prueft `i >= 0`, und `null >= 0` ist WAHR.
+  // Mit null waere ein falsches Token als geglueckter Wiedereinstieg
+  // durchgegangen und der Platz danach undefined.
+  if (i < 0) return -1;
   room.slots[i].ws = ws;
   room.slots[i].connected = true;
+  resumeRoom(room);
   return i;
+}
+
+/** Ist noch ein Mensch verbunden, der ziehen koennte? */
+function connectedHumans(room) {
+  return room.slots.filter((s) => s && !s.isBot && s.connected).length;
+}
+
+/**
+ * Niemand mehr da, der ziehen koennte: Uhr anhalten (Issue #25).
+ *
+ * Vorher lief die Partie ohne ihren Menschen weiter - der Bot zog, die Zugzeit
+ * des Abwesenden lief ab, und nach zwei verpassten Zuegen stand er beim
+ * Zurueckkommen auf dem Verloren-Bildschirm einer Partie, die er nur verlassen
+ * hatte, um die Seite neu zu laden.
+ *
+ * Ist noch ein Mensch da (Partie unter Menschen), bekommt der ein Zeitfenster:
+ * `graceUntil` sagt ihm, wie lange auf die Rueckkehr gewartet wird. Danach
+ * gewinnt er. Ohne das Fenster gaebe es fuer ihn kein Ende.
+ */
+function pauseRoom(room, by) {
+  if (!room.game || room.game.status !== 'playing') return;
+  if (connectedHumans(room) > 0 && !by) return;
+  clearTimer(room);
+  room.paused = true;
+
+  if (connectedHumans(room) > 0) {
+    room.graceUntil = now() + GRACE_MS;
+    room.graceTimer = setTimeout(() => {
+      if (!room.game || room.game.status !== 'playing') return;
+      const bleibt = room.slots.findIndex((s) => s && !s.isBot && s.connected);
+      if (bleibt >= 0) room.game.winner = bleibt;
+      finishRoom(room, 'left');
+    }, GRACE_MS + 200);
+    broadcast(room, { t: 'notice', kind: 'opponentGone', by, seconds: GRACE_MS / 1000 });
+  }
+  pushState(room);
+}
+
+/** Jemand ist zurueck: Uhr wieder anwerfen und das Wartefenster abraeumen. */
+function resumeRoom(room) {
+  if (room.graceTimer) { clearTimeout(room.graceTimer); room.graceTimer = null; }
+  room.graceUntil = 0;
+  if (!room.paused) return;
+  room.paused = false;
+  if (!room.game || room.game.status !== 'playing') return;
+  broadcast(room, { t: 'notice', kind: 'opponentBack' });
+  armTurnTimer(room);
+  pushState(room);
+  maybeBotTurn(room);
+}
+
+/**
+ * Partie freiwillig verlassen (Issue #25).
+ * Gegen den Bot ist sie danach weg - es gibt niemanden, auf den zu warten
+ * waere. Gegen Menschen ist es dasselbe wie ein Verbindungsabbruch: der
+ * Verbliebene wird informiert und bekommt sein Wartefenster.
+ */
+export function leaveGame(room, slotIndex) {
+  const slot = room.slots[slotIndex];
+  if (!slot) return { ok: false, error: 'Nicht in dieser Partie.' };
+
+  const andereMenschen = room.slots.some((s, i) => s && !s.isBot && i !== slotIndex && s.connected);
+  if (!andereMenschen) { closeRoom(room); return { ok: true, closed: true }; }
+
+  slot.connected = false;
+  room.rematchVotes.delete(slotIndex);
+  pauseRoom(room, slot.name);
+  return { ok: true, closed: false };
 }
 
 // ------------------------------------------------------------------- Senden
@@ -180,6 +260,11 @@ export function pushState(room) {
       turnCount: g.turnCount,
       deadline: room.deadline,
       bank: room.bank[i],
+      // Angehalten, weil der Gegenspieler weg ist. Ohne diese beiden Felder
+      // laeuft die Uhr im Client weiter, obwohl serverseitig nichts mehr
+      // passiert - und der Verbliebene weiss nicht, worauf er wartet.
+      paused: room.paused === true,
+      graceUntil: room.graceUntil || 0,
       own: ownView(me),
       tracking: me.tracking,
       scans: me.scans,
@@ -476,6 +561,9 @@ export function markDisconnected(room, slotIndex) {
   if (room.status === 'finished' && !slot.isBot) {
     broadcast(room, { t: 'notice', kind: 'rematchOff', by: slot.name });
   }
+  // Laufende Partie ohne ihren Menschen: Uhr anhalten statt sie weiterlaufen
+  // zu lassen (Issue #25).
+  if (!slot.isBot) pauseRoom(room, connectedHumans(room) > 0 ? slot.name : null);
 }
 
 export function roomCount() { return rooms.size; }
