@@ -280,6 +280,8 @@ function applyOptionsToForm(o) {
   $('o-man').checked = o.maneuverEnabled;
   $('o-pool').checked = o.salvoPool;
   $('o-poolsize').value = o.salvoPoolSize;
+  $('o-botmin').value = o.botMinSeconds;
+  $('o-botmax').value = o.botMaxSeconds;
 }
 
 // Der Vorrat verlaengert die Partie deutlich (Simulation: 39 -> 59 Zuege).
@@ -297,7 +299,8 @@ $('btn-opts').onclick = () => send({
     openingBalance: $('o-opening').checked, singleShotAfterHit: $('o-single').checked,
     scanEnabled: $('o-scan').checked, diveEnabled: $('o-dive').checked,
     maneuverEnabled: $('o-man').checked,
-    salvoPool: $('o-pool').checked, salvoPoolSize: +$('o-poolsize').value
+    salvoPool: $('o-pool').checked, salvoPoolSize: +$('o-poolsize').value,
+    botMinSeconds: +$('o-botmin').value, botMaxSeconds: +$('o-botmax').value
   }
 });
 

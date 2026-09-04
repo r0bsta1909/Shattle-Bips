@@ -22,8 +22,11 @@ ws.on('message', (raw) => {
   if (m.t === 'joined') {
     return send({
       t: 'setOptions',
+      // botMinSeconds/botMaxSeconds auf 0: der Bot denkt im Spiel 3-6 s pro
+      // Zug. Dieser Lauf spielt eine ganze Partie und haengt sonst im
+      // 180-s-Deckel des Testlaufs, statt die Revanche zu erreichen.
       options: { minSalvo: 2, maxSalvo: 4, singleShotAfterHit: true, turnSeconds: 15, decoyCount: 3, decoyLen: 2,
-                 salvoPool: true, salvoPoolSize: 2 }
+                 salvoPool: true, salvoPoolSize: 2, botMinSeconds: 0, botMaxSeconds: 0 }
     });
   }
 

@@ -291,3 +291,48 @@ test('Die Breitengrenze hängt am Bildschirm, nicht an main', () => {
   assert.match(desktopCss, /#screen-game\.active\{[^}]*max-width:none/,
     'die Spielansicht hebt sie auf');
 });
+
+// ---------------------------------------------------- Lobby-Optionen
+import { DEFAULT_OPTIONS } from '../server/rules.js';
+
+test('Jede Lobby-Option ist im Formular einstellbar und wird gesendet', () => {
+  // Eine Option, die nur im Server steht, ist unsichtbar: der Nutzer kann sie
+  // nicht setzen und merkt nicht, dass es sie gibt. Diese Kopplung faellt sonst
+  // erst auf, wenn jemand sie vermisst.
+  const senden = /\$\('btn-opts'\)\.onclick[\s\S]*?\n\}\);/.exec(app);
+  assert.ok(senden, 'setOptions-Aufruf im Client gefunden');
+  const nichtGesendet = Object.keys(DEFAULT_OPTIONS).filter((k) => !senden[0].includes(`${k}:`));
+  assert.deepEqual(nichtGesendet, [], `nicht an den Server geschickt: ${nichtGesendet.join(', ')}`);
+
+  // Und zurueckgeschrieben: sonst zeigt das Formular nach einer Aenderung des
+  // Hosts etwas anderes an, als der Server tatsaechlich kennt.
+  const lesen = /function applyOptionsToForm[\s\S]*?\n\}/.exec(app);
+  assert.ok(lesen, 'applyOptionsToForm gefunden');
+  const nichtGelesen = Object.keys(DEFAULT_OPTIONS).filter((k) => !lesen[0].includes(`o.${k}`));
+  assert.deepEqual(nichtGelesen, [], `nicht ins Formular zurückgeschrieben: ${nichtGelesen.join(', ')}`);
+});
+
+// ------------------------------------------------ Mittelspalte am PC
+test('Mittelspalte: Kommandofeld und Funk füllen sie ohne Lücke', () => {
+  // Ohne Reihenangabe sind beide Reihen `auto`, und das Raster verteilt den
+  // Ueberschuss der hohen Bretter gleichmaessig: eine Luecke zwischen den
+  // beiden Karten, darunter nochmal Rest. Es sah aus, als schwebten sie.
+  assert.match(desktopCss, /grid-template-rows:min-content auto/,
+    'Reihe 1 wächst nicht über das Kommandofeld hinaus');
+  assert.match(desktopCss, /#pane-log > \.log-card\{[^}]*align-self:stretch/,
+    'der Funkverkehr füllt, was übrig bleibt');
+  assert.match(desktopCss, /#pane-log > \.log-card \.log\{[^}]*max-height:none/,
+    'und hat dafür keine feste Höhe mehr');
+});
+
+test('Manövermodus gibt dem Kommandofeld die Mittelspalte', () => {
+  // Der Modus verdoppelt die Hoehe des Feldes (Schiffswahl plus fuenf
+  // Richtungsknoepfe) und draengte den Funk daneben zusammen.
+  assert.match(desktopCss, /:has\(#maneuver-panel:not\(\.hidden\)\)[^{]*\{display:none\}/,
+    'solange manövriert wird, weicht der Funkverkehr');
+  // Die Regel haengt am Zustand im Markup - ohne die Klasse greift sie nie.
+  assert.match(html, /id="maneuver-panel"[^>]*class="[^"]*hidden/,
+    'der Modus steht als Klasse im Markup');
+  assert.match(app, /\$\('maneuver-panel'\)\.classList\.toggle\('hidden'/,
+    'und der Client schaltet genau diese Klasse');
+});

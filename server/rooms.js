@@ -411,7 +411,7 @@ function maybeBotTurn(room) {
     }
     const shots = planShots(room.brain, g, slot);
     doSalvo(room, slot, shots);
-  }, thinkDelay(room.brain));
+  }, thinkDelay(room.brain, room.options));
 }
 
 export function randomPlacementForClient(room) {

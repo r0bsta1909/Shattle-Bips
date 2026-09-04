@@ -7,6 +7,40 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-04 (Fortsetzung) · Mittelspalte ohne Lücke, Bot-Bedenkzeit
+
+**Geändert**
+- **Mittelspalte gefüllt.** `grid-template-rows:min-content auto auto` — Reihe 1 ist genau
+  so hoch wie das Kommandofeld, Reihe 2 nimmt den Überschuss der hohen Bretter auf, und der
+  Funk füllt ihn (`align-self:stretch` + `flex:1` auf der Liste). Vorher waren beide Reihen
+  `auto`: das Raster verteilte den Überschuss gleichmäßig, es klaffte eine Lücke zwischen den
+  Karten und darunter blieb Rest — es sah aus, als schwebten sie.
+- **Manövermodus** blendet den Funk aus, das Kommandofeld bekommt die Spalte allein. Rein per
+  CSS über `:has(#maneuver-panel:not(.hidden))` — der Zustand steht schon im Markup, es
+  braucht kein zusätzliches Feld im Client.
+- **Bot-Bedenkzeit** als Lobby-Option: `botMinSeconds` / `botMaxSeconds`, Standard **3–6 s**,
+  pro Zug neu gewürfelt. War fest verdrahtet auf 1,2–2,8 s.
+
+**Nebenbefund im Prüfstand — der eigentliche Fund dieser Runde**
+`npm run e2e` brauchte 24 s, manchmal 61. Ich hielt das erst für die Folge der neuen
+Bot-Pause. Es war ein **vorbestehender Fehler im Testklienten**: der Scan-Mittelpunkt wurde
+als `11 + rand*77` gewürfelt und traf auch Randfelder (19 = Reihe 1 / Spalte 9). Der Server
+wies den Scan ab und schickte **keinen** neuen Zustand — der Klient wartete auf einen Zug, der
+nicht kam, bis der 60-s-Zugtimer ihn erlöste. Der Lauf bestand trotzdem, nur langsam.
+Mittelpunkt jetzt auf Reihe/Spalte 1–8 beschränkt: **24 s → 1 s**, keine Fehlermeldungen mehr.
+Ganze e2e-Strecke 95 s → 23 s.
+
+**Gelernt**
+- Ein Test, der nur über einen Timeout ins Ziel kommt, meldet das nicht — er ist bloß langsam.
+  **Laufzeit ist ein Prüfergebnis.** Der Sprung von 24 auf 61 s war das einzige Signal.
+- `e2e:options` fiel durch die neue Bot-Pause in seinen 180-s-Deckel. Wer eine Wartezeit zur
+  Voreinstellung macht, muss jeden Prüfstand mitziehen, der eine ganze Partie spielt.
+
+**Offen**
+- Am PC gegenprüfen: Mittelspalte bündig mit den Brettern, Manövermodus ruhiger.
+- Die Richtungsknöpfe im Manövermodus stehen 3+2 nebeneinander. Ein 3×3-Steuerkreuz wäre
+  ruhiger — bewusst nicht gemacht, war nicht Teil der Rückmeldung.
+
 ## 2026-09-04 (Fortsetzung) · Bedienung in die Mitte, Funk zentriert
 
 Rückmeldung zum Spieltisch: „ich muss im linken feld auswählen was ich machen will und ganz

@@ -140,6 +140,25 @@ Nützlich dabei: `display:contents` auf einem Zwischenbehälter gibt dessen Kind
 ab, sodass sie einzeln in Flächen gesetzt werden können — mit `display:block` davor als
 Rückfall, dasselbe Muster wie bei `--cs`.
 
+### Laufzeit ist ein Prüfergebnis
+`npm run e2e` brauchte mal 24, mal 61 Sekunden und bestand jedes Mal. Ursache: der Testklient
+würfelte Scan-Mittelpunkte als `11 + rand*77` und traf damit auch Randfelder. Der Server wies
+den Scan ab und schickte **keinen** neuen Zustand — der Klient wartete auf einen Zug, der nie
+kam, bis der 60-Sekunden-Zugtimer die Partie weiterschob. Bestanden hat er trotzdem.
+
+**Regel:** Ein Lauf, der nur über einen Timeout ins Ziel kommt, meldet das nicht. Wenn eine
+Suite ohne erkennbaren Grund langsamer wird, ist das ein Befund und keine Randnotiz — die
+Schwankung war hier das einzige Signal. Und: wer eine Wartezeit zur Voreinstellung macht
+(hier die Bot-Bedenkzeit), muss jeden Prüfstand mitziehen, der eine ganze Partie spielt,
+sonst läuft der in seinen eigenen Deckel.
+
+### Zustand, der schon im Markup steht, braucht kein zweites Feld
+Der Manövermodus schaltet `#maneuver-panel.hidden`. Dass daneben der Funkverkehr weichen soll,
+lässt sich damit allein ausdrücken: `:has(#maneuver-panel:not(.hidden))`. Kein neues
+Client-Feld, keine zweite Wahrheit, die auseinanderlaufen kann — und Browser ohne `:has()`
+verwerfen nur die Regel und zeigen weiter beides. **Regel:** Vor einem neuen Zustandsfeld
+prüfen, ob der vorhandene DOM-Zustand die Frage schon beantwortet.
+
 ### Die Bedienung gehört zwischen die Bretter, nicht an den Rand
 Am PC lag die Leiste zunächst rechts außen: auswählen links, bestätigen ganz rechts — eine
 Diagonale über den ganzen Schirm, bei jedem Zug. **Regel:** Was gemeinsam bedient wird, steht

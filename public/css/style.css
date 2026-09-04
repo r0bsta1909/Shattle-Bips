@@ -289,11 +289,34 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
       "foe  ctrl own"
       "foe  log  own"
       "info info info";
+
+    /* Reihe 1 ist genau so hoch wie das Kommandofeld, Reihe 2 nimmt auf, was
+       die hohen Bretter daneben uebrig lassen. Ohne diese Angabe sind beide
+       Reihen `auto`, und das Raster verteilt den Ueberschuss gleichmaessig:
+       dann klafft eine Luecke zwischen Kommandofeld und Funkverkehr, und
+       unter dem Funk bleibt nochmal Rest stehen - es sah aus, als schwebten
+       zwei Karten in der Mitte.
+       `min-content` waechst nicht ueber den Inhalt hinaus, `auto` schon -
+       deshalb landet der ganze Ueberschuss in Reihe 2. */
+    grid-template-rows:min-content auto auto;
   }
   #pane-foe > .board-col{grid-area:foe}
   #pane-own > .board-col{grid-area:own}
   #pane-own > .info     {grid-area:info}
   #pane-log > .log-card {grid-area:log}
+
+  /* Der Funk fuellt, was das Kommandofeld uebrig laesst, statt eine feste
+     Hoehe zu haben. Damit endet die Mittelspalte genau mit den Brettern. */
+  #pane-log > .log-card{align-self:stretch;display:flex;flex-direction:column;min-height:0}
+  #pane-log > .log-card .log{max-height:none;flex:1 1 0;min-height:120px}
+
+  /* Manoevermodus: das Kommandofeld verdoppelt seine Hoehe (Schiffswahl plus
+     fuenf Richtungsknoepfe) und draengte den Funk zusammen. Jetzt weicht der
+     Funk so lange, bis der Modus endet - das Feld bekommt die Mittelspalte
+     allein. Der Zustand steht schon im Markup (`#maneuver-panel.hidden`),
+     also braucht es dafuer kein zusaetzliches Feld im Client.
+     Browser ohne :has() verwerfen die Regel und zeigen weiter beides. */
+  .screen#screen-game.active:has(#maneuver-panel:not(.hidden)) #pane-log > .log-card{display:none}
   .screen#screen-game.active > .controls{grid-area:ctrl}
   .screen#screen-game.active .board-col,
   .screen#screen-game.active .card{margin-bottom:0}   /* das macht jetzt gap */

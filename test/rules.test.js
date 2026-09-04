@@ -314,3 +314,35 @@ test('Vorrat: Optionen werden geklammert', () => {
   assert.equal(mergeOptions({ salvoPool: 1 }).salvoPool, true);
   assert.equal(mergeOptions({}).salvoPool, false, 'standardmäßig aus');
 });
+
+// ------------------------------------------------------- Bedenkzeit des Bots
+import { thinkDelay } from '../server/bot.js';
+
+test('Bot-Bedenkzeit: Bereich wird geklammert und nie verdreht', () => {
+  assert.equal(mergeOptions({}).botMinSeconds, 3, 'Standard 3 s');
+  assert.equal(mergeOptions({}).botMaxSeconds, 6, 'bis 6 s');
+  assert.equal(mergeOptions({ botMinSeconds: -5 }).botMinSeconds, 0);
+  assert.equal(mergeOptions({ botMaxSeconds: 999 }).botMaxSeconds, 30);
+
+  // Ein umgedrehter Bereich ist eine halb fertige Eingabe, kein Fehler des
+  // Nutzers - die Obergrenze zieht nach, wie bei minSalvo/maxSalvo.
+  assert.equal(mergeOptions({ botMinSeconds: 8, botMaxSeconds: 2 }).botMaxSeconds, 8);
+});
+
+test('Bot denkt innerhalb des eingestellten Bereichs', () => {
+  const o = mergeOptions({ botMinSeconds: 3, botMaxSeconds: 6 });
+  assert.equal(thinkDelay({ rand: () => 0 }, o), 3000, 'untere Grenze erreichbar');
+  for (const r of [0, 0.25, 0.5, 0.999999]) {
+    const ms = thinkDelay({ rand: () => r }, o);
+    assert.ok(ms >= 3000 && ms <= 6000, `${ms} ms liegt ausserhalb von 3000..6000`);
+  }
+
+  // Ohne Pause: das brauchen die e2e-Laeufe, sonst dauert eine Partie Minuten.
+  const schnell = mergeOptions({ botMinSeconds: 0, botMaxSeconds: 0 });
+  assert.equal(thinkDelay({ rand: () => 0.9 }, schnell), 0);
+
+  // Ohne Optionen faellt er auf den Standard zurueck statt auf 0 - sonst
+  // antwortet der Bot ueberall dort sofort, wo jemand das Argument vergisst.
+  const ohne = thinkDelay({ rand: () => 0 });
+  assert.equal(ohne, DEFAULT_OPTIONS.botMinSeconds * 1000);
+});

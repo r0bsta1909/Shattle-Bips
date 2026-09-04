@@ -40,7 +40,13 @@ export const DEFAULT_OPTIONS = {
   // eine aus dem Vorrat, Einzelschuss kostet nichts. Ist er leer, geht nur
   // noch Einzelschuss.
   salvoPool: false,
-  salvoPoolSize: 8
+  salvoPoolSize: 8,
+  // Bedenkzeit des Bots in Sekunden, als Bereich. Ein Bot, der sofort
+  // antwortet, wirkt maschinell; einer mit fester Pause wirkt abgezaehlt.
+  // Deshalb wird pro Zug neu gewuerfelt. 0/0 heisst ohne Pause – das brauchen
+  // die e2e-Laeufe, sonst dauert eine Partie Minuten.
+  botMinSeconds: 3,
+  botMaxSeconds: 6
 };
 
 export function mergeOptions(raw = {}) {
@@ -56,6 +62,11 @@ export function mergeOptions(raw = {}) {
   o.decoyLen = num(raw.decoyLen, 1, 3, o.decoyLen);
   o.turnSeconds = num(raw.turnSeconds, 15, 300, o.turnSeconds);
   o.salvoPoolSize = num(raw.salvoPoolSize, 0, 30, o.salvoPoolSize);
+  o.botMinSeconds = num(raw.botMinSeconds, 0, 30, o.botMinSeconds);
+  o.botMaxSeconds = num(raw.botMaxSeconds, 0, 30, o.botMaxSeconds);
+  // Wie bei minSalvo/maxSalvo: ein umgedrehter Bereich ist kein Fehler des
+  // Nutzers, sondern eine halb fertige Eingabe. Obergrenze zieht nach.
+  if (o.botMaxSeconds < o.botMinSeconds) o.botMaxSeconds = o.botMinSeconds;
   for (const k of ['openingBalance', 'singleShotAfterHit', 'scanEnabled', 'diveEnabled', 'maneuverEnabled', 'salvoPool']) {
     if (raw[k] !== undefined) o[k] = !!raw[k];
   }

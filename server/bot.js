@@ -238,6 +238,14 @@ export function planShots(brain, game, slot) {
   return shots;
 }
 
-export function thinkDelay(brain) {
-  return 1200 + Math.floor(brain.rand() * 1600); // 1,2–2,8 s
+/**
+ * Bedenkzeit fuer einen Bot-Zug, in Millisekunden.
+ * Pro Zug neu gewuerfelt aus dem eingestellten Bereich: eine feste Pause
+ * klingt abgezaehlt, gar keine wirkt maschinell. Der Bereich kommt aus den
+ * Lobby-Optionen (Standard 3–6 s), nicht mehr fest aus dem Code.
+ */
+export function thinkDelay(brain, options = DEFAULT_OPTIONS) {
+  const lo = Math.max(0, (options.botMinSeconds ?? DEFAULT_OPTIONS.botMinSeconds) * 1000);
+  const hi = Math.max(lo, (options.botMaxSeconds ?? DEFAULT_OPTIONS.botMaxSeconds) * 1000);
+  return lo + Math.floor(brain.rand() * (hi - lo + 1));
 }
