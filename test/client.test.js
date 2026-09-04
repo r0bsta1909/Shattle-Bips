@@ -217,7 +217,20 @@ test('Am PC stehen beide Bretter nebeneinander', () => {
   assert.ok(rows.length >= 2, 'mindestens zwei Reihen');
   assert.ok(rows[0].includes('foe') && rows[0].includes('own'),
     'Gegnerbrett und eigenes Brett in derselben Reihe – sonst stapeln sie sich');
-  assert.ok(rows[0].includes('ctrl'), 'die Bedienung steht daneben, nicht darunter');
+
+  // Die Bedienung steht ZWISCHEN den Brettern: man waehlt auf dem einen Brett
+  // und bestaetigt gleich daneben, statt quer ueber den Schirm zu wandern.
+  // Beide Bretter haben denselben kurzen Weg.
+  assert.equal(rows[0][1], 'ctrl', 'die Bedienung liegt zwischen den Brettern');
+  assert.equal(rows[0].indexOf('foe'), 0, 'Gegnerbrett links');
+  assert.equal(rows[0].indexOf('own'), 2, 'eigenes Brett rechts');
+
+  // Nichts sitzt am aeusseren Rand: der Funk liegt in der Mittelspalte, die
+  // Flottenuebersicht quer darunter. Damit ist alles zentriert ausgerichtet.
+  assert.ok(rows.some((r) => r[1] === 'log'), 'der Funkverkehr sitzt in der Mitte');
+  const letzte = rows[rows.length - 1];
+  assert.ok(letzte.every((a) => a === letzte[0]),
+    'die unterste Reihe geht über die volle Breite');
 
   // Ohne display:contents bleiben Brett und Flottenuebersicht in einem Kasten
   // und lassen sich nicht getrennt setzen.
@@ -240,11 +253,14 @@ test('Am PC stehen beide Bretter nebeneinander', () => {
   const cols = /grid-template-columns:([^;]+);/.exec(desktopCss);
   assert.match(cols[1], /minmax\(/, 'die Bedienspalte hat eine Untergrenze');
 
-  // Sonst misst max-content die Ueberschrift ungebrochen mit: ein langer
-  // Gegnername macht die Spalte breiter als ihr Brett, und der Ueberhang
-  // laeuft bei zentriertem Raster nach links aus dem Bild.
-  assert.match(desktopCss, /\.board-col\{width:calc\(var\(--cs\) \* 10/,
-    'die Brettspalte ist so breit wie ihr Brett, nicht wie ihre Überschrift');
+  // Als `max-content` messen Überschrift und die quer darunter liegende
+  // Flottenübersicht mit und ziehen die Spalte auf; ein langer Gegnername
+  // macht sie breiter als ihr Brett, und der Überhang läuft bei zentriertem
+  // Raster nach links aus dem Bild. Deshalb ein festes Gleis.
+  assert.match(desktopCss, /--board-w:calc\(var\(--cs\) \* 10/,
+    'die Brettbreite ist gerechnet, nicht gemessen');
+  assert.equal((cols[1].match(/var\(--board-w\)/g) || []).length, 2,
+    'beide Brettspalten sind auf diese Breite festgelegt');
 });
 
 test('Aktionsknöpfe werden am PC nicht gequetscht', () => {
@@ -253,8 +269,16 @@ test('Aktionsknöpfe werden am PC nicht gequetscht', () => {
   // schmalen Seitenspalte stand danach "Feue", "Aufklae", "Tauch".
   assert.match(cssCode, /\.row\.actions button\{[^}]*min-width:0/,
     'die enge Fassung existiert weiterhin');
-  assert.match(desktopCss, /\.row\.actions\{[^}]*flex-direction:column/,
-    'am PC untereinander – dort ist die Spalte schmal, nicht der Schirm');
+
+  // Geprueft wird die Regel, nicht das Mittel: am PC darf ein Knopf nie
+  // schmaler werden als sein Text. Ob er dann 2x2 steht oder untereinander,
+  // entscheidet der Umbruch - abgeschnitten wird nichts mehr.
+  const actions = /\.row\.actions button\{([^}]*)\}/.exec(desktopCss);
+  assert.ok(actions, 'am PC gibt es eine eigene Fassung der Knopfregel');
+  assert.match(actions[1], /min-width:auto/,
+    'nie schmaler als die Beschriftung');
+  assert.match(desktopCss, /\.row\.actions\{[^}]*flex-wrap:wrap/,
+    'passt nicht alles nebeneinander, wird umgebrochen statt gequetscht');
 });
 
 test('Die Breitengrenze hängt am Bildschirm, nicht an main', () => {

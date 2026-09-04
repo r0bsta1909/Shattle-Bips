@@ -140,6 +140,25 @@ Nützlich dabei: `display:contents` auf einem Zwischenbehälter gibt dessen Kind
 ab, sodass sie einzeln in Flächen gesetzt werden können — mit `display:block` davor als
 Rückfall, dasselbe Muster wie bei `--cs`.
 
+### Die Bedienung gehört zwischen die Bretter, nicht an den Rand
+Am PC lag die Leiste zunächst rechts außen: auswählen links, bestätigen ganz rechts — eine
+Diagonale über den ganzen Schirm, bei jedem Zug. **Regel:** Was gemeinsam bedient wird, steht
+nebeneinander. Zwischen beiden Brettern ist der Weg von *beiden* Seiten kurz, und der Platz
+in der Mittelspalte trägt nebenbei den Funkverkehr, der sonst außen ausreißt.
+
+Dazu die Rechnung, die man **vor** dem Umbauen macht: eine zusätzliche Reihe quer unter der
+Legende hätte 265 px Höhe gekostet und die Kacheln von 52 auf 34 px gedrückt. Eine halb leere
+Spalte zu füllen ist billiger als eine Reihe anzuhängen — Höhe ist am PC die knappe Achse,
+nicht die Breite.
+
+### Ein Test, der das Mittel prüft, fällt beim Umbau — obwohl die Regel gilt
+Zwei Tests sicherten `flex-direction:column` und `.board-col{width:…}`. Beim nächsten Umbau
+wurden dieselben Ziele anders erreicht (Umbruch statt Spalte, Gleisbreite statt Elementbreite)
+— beide Tests fielen, ohne dass etwas kaputt war. **Regel:** die Bedingung so formulieren, wie
+die Regel lautet: „ein Knopf wird nie schmaler als seine Beschriftung" (`min-width:auto`) statt
+„die Knöpfe stehen untereinander". Ein Test, der beim Umbau lärmt, wird beim nächsten Mal
+gelockert statt gelesen.
+
 ### Ein Test, der eine Ortsangabe prüft, prüft nicht die Regel
 Der `--cs`-Test verlangte: „im **ersten** `@media(min-width:780px)`-Block steht kein `--cs`".
 Gemeint war: „die Höhenkopplung darf nirgends verloren gehen". Ein zweiter Block hätte die

@@ -7,6 +7,48 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-04 (Fortsetzung) · Bedienung in die Mitte, Funk zentriert
+
+Rückmeldung zum Spieltisch: „ich muss im linken feld auswählen was ich machen will und ganz
+rechts dann die aktion bestätigen, langer weg" — und der Vorschlag, den Funkverkehr mittig wie
+die Legende zu setzen, damit nichts nach außen ausreißt.
+
+**Geändert** (weiter nur `@media(min-width:780px)`)
+- Bedienung steht **zwischen** den Brettern: `"foe ctrl own"`. Beide Bretter haben denselben
+  kurzen Weg zur Leiste, statt einer Diagonale über den ganzen Schirm.
+- Funkverkehr in die **Mittelspalte** unter die Bedienung, Flottenübersicht quer über die
+  volle Breite. Nichts sitzt mehr am äußeren Rand.
+- Aktionsknöpfe **2×2 mit Umbruch** statt untereinander: `flex:1 1 120px` mit
+  `min-width:auto` — nie schmaler als ihr Text, also nie abgeschnitten, und bei zu wenig
+  Platz umgebrochen statt gequetscht. Spart 112 px Höhe.
+- Flottenlisten am PC **waagerecht**. In einer Karte über die volle Breite ließen fünf
+  untereinander stehende Zeilen den halben Kasten leer.
+- Brettspalten als **festes Gleis** (`--board-w`) statt `max-content`, weil jetzt auch die
+  querliegende Übersicht an der Spaltenbreite mitgemessen hätte.
+
+**Gelernt**
+- Der naheliegende Weg — Funk als vierte Reihe quer unter die Legende — kostet **265 px**
+  Höhe und hätte die Kacheln von 52 auf **34 px** gedrückt. Vor dem Umbauen ausgerechnet,
+  nicht danach gemerkt. Die Mittelspalte war ohnehin halb leer.
+- Zwei Tests prüften das **Mittel** (`flex-direction:column`, `.board-col{width:…}`) statt der
+  **Regel**. Als das Mittel wechselte, fielen sie, obwohl die Regel weiter galt. Jetzt geprüft:
+  „ein Knopf wird nie schmaler als sein Text" und „die Brettbreite ist gerechnet".
+
+**Nachgerechnet** — Kachel · Gesamtbreite · passt senkrecht
+
+| Schirm | Kachel | Breite | Höhe |
+|---|---|---|---|
+| 1859×990 (Schirm des Nutzers) | 52,0 | 1498 | passt |
+| 1440×900 | 48,5 | 1428 | passt |
+| 1366×768 | 42,8 | 1314 | passt |
+| 1024×768 | 27,7 | 1012 | passt |
+
+Unter ~720 px Fensterhöhe scrollt die Seite: Bedienung (196) + Funk (244) setzen in der
+Mittelspalte eine Untergrenze, die von der Kachelgröße unabhängig ist.
+
+**Offen**
+- Am PC gegenprüfen: Weg vom Brett zum Feuern kurz genug, Knöpfe vollständig beschriftet.
+
 ## 2026-09-04 · `834e968` + `a635d01` · Spieltisch für den PC
 
 Aus einem Screenshot vom PC. Der Nutzer bestätigt Mobil („sieht wirklich gut aus"), meldet

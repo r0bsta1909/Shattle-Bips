@@ -246,11 +246,16 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
 
 @media(min-width:780px){
   /* ================================================== Spieltisch (Breitbild)
-     Am PC ist Platz fuer beides nebeneinander. Vorher lagen alle drei Bereiche
-     untereinander in Spalte 1 (`auto`) und die Bedienung bekam als `1fr` nur
-     den Rest - rund 155px, in denen die Knopfbeschriftung abgeschnitten wurde.
-     Eine `auto`-Spalte nimmt sich die max-content-Breite ihres breitesten
-     Kindes; `1fr` sichert keinen Anteil zu, es verteilt nur, was uebrig ist. */
+     Am PC ist Platz fuer beides nebeneinander. Die Bedienung steht ZWISCHEN
+     den Brettern: man waehlt links die Felder und bestaetigt gleich daneben,
+     statt quer ueber den Schirm zu wandern. Beide Bretter haben denselben
+     kurzen Weg zur Leiste.
+
+     Vorher lagen alle drei Bereiche untereinander in Spalte 1 (`auto`) und die
+     Bedienung bekam als `1fr` nur den Rest - rund 155px, in denen die
+     Knopfbeschriftung abgeschnitten wurde. Eine `auto`-Spalte nimmt sich die
+     max-content-Breite ihres breitesten Kindes; `1fr` sichert keinen Anteil
+     zu, es verteilt nur, was uebrig ist. */
   .game-tabs{display:none}
 
   /* Die Bereiche verschwinden als Kasten: ihre Kinder werden selbst zu
@@ -264,22 +269,27 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
     max-width:none;              /* zwei Bretter passen nicht in 1100px */
     position:relative;           /* Bezug fuer die Einblendung */
     justify-content:safe center; /* Rest der Breite links und rechts */
-    grid-template-columns:max-content max-content minmax(200px,300px);
-    grid-template-rows:auto auto;
-    grid-template-areas:
-      "foe  own  ctrl"
-      "info info log";
-  }
-  /* Jede Brettspalte ist genau so breit wie ihr Brett. Ohne die Angabe misst
-     `max-content` die Ueberschrift ungebrochen mit: "Gegner: <16 Zeichen>
-     [5 Schiffe]" sind rund 250px und damit auf schmalen Fenstern breiter als
-     das Brett selbst (bei 20px-Kacheln 241px). Die Spalte waere dann breiter
-     als noetig - und mit zentriertem Raster liefe der Ueberhang nach links aus
-     dem Bild, wohin man nicht scrollen kann.
-     10*cs + 41: neun Luecken a 2, Rasterrand 2x2, Achsenstreifen 16, Rahmen 3. */
-  #pane-foe > .board-col,
-  #pane-own > .board-col{width:calc(var(--cs) * 10 + 41px)}
 
+    /* Die Brettspalten sind als GLEIS auf ihre Brettbreite festgelegt, nicht
+       auf max-content. Sonst messen die Ueberschrift ("Gegner: <16 Zeichen>
+       [5 Schiffe]" sind rund 250px) und die quer darunter liegende
+       Flottenuebersicht mit und ziehen die Spalte auf - bei 20px-Kacheln ist
+       das Brett nur 241px breit. Bei zentriertem Raster liefe der Ueberhang
+       nach links aus dem Bild, wohin man nicht scrollen kann.
+       10*cs + 41: neun Luecken a 2, Rasterrand 2x2, Achsenstreifen 16,
+       Rahmen 3. */
+    --board-w:calc(var(--cs) * 10 + 41px);
+    grid-template-columns:var(--board-w) minmax(200px,300px) var(--board-w);
+
+    /* Der Funkverkehr sitzt in der Mittelspalte unter der Bedienung - dort
+       ist ohnehin Platz, und er reisst nicht mehr nach rechts aus. Als
+       vierte Reihe quer unter der Legende haette er 265px Hoehe gekostet und
+       die Kacheln von 52 auf 34px gedrueckt. */
+    grid-template-areas:
+      "foe  ctrl own"
+      "foe  log  own"
+      "info info info";
+  }
   #pane-foe > .board-col{grid-area:foe}
   #pane-own > .board-col{grid-area:own}
   #pane-own > .info     {grid-area:info}
@@ -288,10 +298,20 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
   .screen#screen-game.active .board-col,
   .screen#screen-game.active .card{margin-bottom:0}   /* das macht jetzt gap */
 
-  /* Vier Knoepfe nebeneinander ist die Handy-Loesung. In einer 200-300px
-     breiten Spalte schneiden sie ihre Beschriftung ab - untereinander nicht. */
-  .row.actions{flex-direction:column;align-items:stretch}
-  .row.actions button{flex:0 0 auto;padding:11px 13px;font-size:15px}
+  /* Vier Knoepfe mit `min-width:0` nebeneinander ist die Handy-Loesung: sie
+     duerfen dort schmaler werden als ihr Text. In einer schmalen Spalte
+     schnitten sie ihre Beschriftung ab ("Feue", "Aufklae").
+     Hier: `min-width:auto` - nie schmaler als der Text - und Umbruch. Damit
+     stehen sie 2x2, wenn die Spalte breit genug ist, sonst untereinander.
+     Beides ohne Abschneiden, und 2x2 spart gegenueber vier Zeilen 112px
+     Hoehe, die dem Brett zugutekommen. */
+  .row.actions{flex-wrap:wrap}
+  .row.actions button{flex:1 1 120px;min-width:auto;padding:11px 10px;font-size:15px}
+
+  /* Die Flottenuebersicht liegt quer unter beiden Brettern. Untereinander
+     stehende Listen lassen dort den halben Kasten leer und kosten 197px;
+     waagerecht sind es 118px - der Rest gehoert dem Brett. */
+  .fleet-list{display:flex;flex-wrap:wrap;gap:2px 18px}
 
   /* Die Einblendung gehoert dorthin, wo man hinschaut: ueber das Gegnerbrett.
      In der Bildmitte laege sie auf einem Breitbild neben dem Geschehen. Ein
@@ -363,6 +383,6 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
    Die Aufstellung waechst mit: sonst stellt man auf 34px-Kacheln auf und
    spielt danach auf 52px. */
 @media(min-width:780px){
-  #screen-game{--cs:clamp(20px, min((100vw - 470px) / 20, (100dvh - 440px) / 10), 52px)}
+  #screen-game{--cs:clamp(20px, min((100vw - 470px) / 20, (100dvh - 340px) / 10), 52px)}
   #screen-placement{--cs:clamp(24px, min((100vw - 400px) / 10, (100dvh - 260px) / 10), 44px)}
 }
