@@ -361,14 +361,17 @@ function finishRoom(room, reason) {
   pushState(room);
 }
 
-function onTimeout(room) {
+/** Exportiert fuer den Pruefstand: die Aufgabe-Grenze ist einstellbar (#8, README). */
+export function onTimeout(room) {
   const g = room.game;
   if (!g || g.status !== 'playing') return;
   const slot = g.turn;
   room.timeoutStreak[slot] += 1;
   passTurn(g, slot);
   broadcast(room, { t: 'notice', kind: 'timeout', slot });
-  if (room.timeoutStreak[slot] >= 2) {
+  // Aufgabe nach n verpassten Zuegen in Folge - aus den Optionen, 0 = nie.
+  const grenze = (room.options || DEFAULT_OPTIONS).timeoutForfeit ?? 2;
+  if (grenze > 0 && room.timeoutStreak[slot] >= grenze) {
     g.winner = 1 - slot;
     finishRoom(room, 'timeout');
     return;

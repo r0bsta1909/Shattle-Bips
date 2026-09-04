@@ -219,12 +219,21 @@ function handle(m) {
       // bekommen und dann noch klicken muessen (Issue #15). Schlaegt es fehl,
       // bleibt der Code im Feld stehen und die Fehlermeldung erscheint wie
       // sonst auch; niemand landet in einer Sackgasse.
+      // Aber nur, wenn ein Name bekannt ist. Auf einem Geraet ohne
+      // gespeicherten Namen sass man sonst als "Kapitaen" in der Lobby, ohne
+      // je gefragt worden zu sein (Issue #26). Dann bleibt der Code im Feld,
+      // der Cursor steht im Namensfeld und "Beitreten" fuehrt hinein.
       if (linkCode && !myCode) {
-        send({ t: 'joinLobby', code: linkCode, name: nameValue() });
+        if ($('name').value.trim()) send({ t: 'joinLobby', code: linkCode, name: nameValue() });
+        else {
+          $('join-hint').textContent = `Lobby ${linkCode} gefunden. Namen eingeben, dann „Beitreten“.`;
+          $('name').focus();
+        }
       }
       break;
 
     case 'joined':
+      $('join-hint').textContent = '';
       myCode = m.code; myToken = m.token; mySlot = m.playerId;
       vsBot = m.vsBot === true;
       isHost = m.playerId === 0;
@@ -249,7 +258,7 @@ function handle(m) {
       });
       const canEdit = mySlot === 0;
       $('opt-owner').textContent = canEdit ? '' : '(nur der Host stellt ein)';
-      for (const el of document.querySelectorAll('.opts input')) el.disabled = !canEdit;
+      for (const el of document.querySelectorAll('#opt-card input')) el.disabled = !canEdit;
       $('btn-opts').disabled = !canEdit;
       if (show.pendingPlacement) { show.pendingPlacement = false; startPlacement(); }
       break;
@@ -410,6 +419,7 @@ function applyOptionsToForm(o) {
   $('o-min').value = o.minSalvo; $('o-max').value = o.maxSalvo;
   $('o-decoys').value = o.decoyCount; $('o-decoylen').value = o.decoyLen;
   $('o-time').value = o.turnSeconds;
+  $('o-forfeit').value = o.timeoutForfeit;
   $('o-opening').checked = o.openingBalance;
   $('o-single').checked = o.singleShotAfterHit;
   $('o-scan').checked = o.scanEnabled;
@@ -435,7 +445,7 @@ $('btn-opts').onclick = () => send({
   options: {
     minSalvo: +$('o-min').value, maxSalvo: +$('o-max').value,
     decoyCount: +$('o-decoys').value, decoyLen: +$('o-decoylen').value,
-    turnSeconds: +$('o-time').value,
+    turnSeconds: +$('o-time').value, timeoutForfeit: +$('o-forfeit').value,
     openingBalance: $('o-opening').checked, singleShotAfterHit: $('o-single').checked,
     scanEnabled: $('o-scan').checked, diveEnabled: $('o-dive').checked,
     maneuverEnabled: $('o-man').checked,
@@ -473,15 +483,17 @@ function cellsFor(r, c, len, horiz) {
   const out = [];
   for (let i = 0; i < len; i++) {
     const rr = horiz ? r : r + i, cc = horiz ? c + i : c;
-    if (rr >= N || cc >= N) return null;
+    // Auch negativ pruefen: das Rueckwaertsdrehen (#27) rechnet vom Fuss aus.
+    if (rr < 0 || cc < 0 || rr >= N || cc >= N) return null;
     out.push(ix(rr, cc));
   }
   return out;
 }
 
-function blockedSet() {
+const blockedSet = () => blockedFor(placeObjects);
+function blockedFor(objects) {
   const s = new Set();
-  for (const o of placeObjects) {
+  for (const o of objects) {
     for (const i of o.cells) {
       const [r, c] = rc(i);
       for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
@@ -506,9 +518,37 @@ function onPlaceHover(i) {
   for (const x of cells) $('place-grid').children[x].classList.add(ok ? 'preview' : 'bad');
 }
 
+/**
+ * Gesetztes Objekt an Ort und Stelle drehen (Issues #27, #28).
+ *
+ * Auf dem Telefon gibt es weder Taste R noch Rechtsklick, und der Knopf
+ * "Drehen" schaltete nur die Ausrichtung des NAECHSTEN Objekts um - ein
+ * bereits liegendes Schiff liess sich gar nicht mehr drehen. Jetzt dreht ein
+ * Tipp auf das Schiff selbst, um sein erstes Feld; passt es so nicht, wird
+ * rueckwaerts um dasselbe Feld gedreht, wie beim Manoever in der Engine.
+ */
+function rotatePlaced(k) {
+  const o = placeObjects[k];
+  const horiz = !o.horiz;
+  const others = placeObjects.filter((x) => x !== o);
+  const blocked = blockedFor(others);
+  const versuch = (r, c) => {
+    const cells = cellsFor(r, c, o.len, horiz);
+    return cells && !cells.some((x) => blocked.has(x)) ? { r, c, cells } : null;
+  };
+  const neu = versuch(o.r, o.c)
+    || (horiz ? versuch(o.r, o.c - o.len + 1) : versuch(o.r - o.len + 1, o.c));
+  if (!neu) { $('place-error').textContent = `${o.label} passt gedreht nicht – ein Feld Abstand ist Pflicht.`; return; }
+  placeObjects[k] = { ...o, r: neu.r, c: neu.c, horiz, cells: neu.cells };
+  $('place-error').textContent = '';
+  renderPlacement();
+}
+
 function onPlaceClick(i) {
   if (placementLocked) return;
   const q = placeQueue();
+  const liegt = placeObjects.findIndex((o) => o.cells.includes(i));
+  if (liegt >= 0) return rotatePlaced(liegt);
   if (placeSel >= q.length) return;
   const spec = q[placeSel];
   const [r, c] = rc(i);
@@ -537,6 +577,7 @@ function renderPlacement() {
     ul.appendChild(li);
   });
   $('orient').textContent = placeHoriz ? 'waagerecht' : 'senkrecht';
+  $('btn-rotate').textContent = placeHoriz ? '↔ waagerecht' : '↕ senkrecht';
 
   // Solange die Aufstellung beim Server liegt, darf sie hier nicht mehr
   // veraendert werden. Vorher blieben "Zufaellig" und "Leeren" bedienbar und
@@ -909,11 +950,15 @@ function renderEnd() {
   $('end-title').textContent = won ? 'Gewonnen.' : 'Verloren.';
   // Ohne Grund wirkte ein Sieg durch Zeitablauf wie ein Fehler: die Partie war
   // vorbei, ohne dass ein Schiff versenkt wurde (Issue #8).
+  const n = state.options?.timeoutForfeit ?? 2;
+  const zuege = { 1: 'einen Zug', 2: 'zwei Züge in Folge', 3: 'drei Züge in Folge' }[n] || `${n} Züge in Folge`;
   const reason = state.endReason === 'timeout'
     ? (won
-        ? 'Der Gegner hat zwei Züge in Folge verstreichen lassen – das gilt als Aufgabe.'
-        : 'Du hast zwei Züge in Folge verstreichen lassen – das gilt als Aufgabe.')
-    : 'Alle fünf Schiffe versenkt.';
+        ? `Der Gegner hat ${zuege} verstreichen lassen – das gilt als Aufgabe.`
+        : `Du hast ${zuege} verstreichen lassen – das gilt als Aufgabe.`)
+    : state.endReason === 'left'
+      ? 'Der Gegner hat die Partie verlassen.'
+      : 'Alle fünf Schiffe versenkt.';
   $('end-detail').textContent = `${reason} Partie nach ${state.turnCount} Zügen beendet.`;
   const paint = (elId, view) => {
     const el = $(elId);

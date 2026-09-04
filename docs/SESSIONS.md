@@ -7,6 +7,37 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-04 (Abend) · Drei Issues vom iPhone, Lobby gruppiert, Aufgabe-Grenze als Option
+
+**Issues #26–#28**, alle vom Gerät gegen `331d571`:
+- **#26** Lobby-Link führte ohne Namensabfrage hinein. Ursache: der Client sendete beim Öffnen
+  eines Links sofort `joinLobby` mit dem Namensfeld – auf einem Gerät ohne gespeicherten Namen
+  also als „Kapitän". Jetzt: Beitritt nur mit bekanntem Namen, sonst Code im Feld, Cursor im
+  Namensfeld, Hinweis „Lobby NZRM gefunden".
+- **#27/#28** Drehen in der Aufstellung. Ursache: „Drehen (R)" schaltete nur die Ausrichtung des
+  *nächsten* Objekts um; ein liegendes Schiff ließ sich gar nicht drehen, und R/Rechtsklick gibt
+  es auf dem Telefon nicht. Jetzt dreht ein **Tipp auf das Schiff** es an Ort und Stelle (am Rand
+  rückwärts um dasselbe Feld, wie das Manöver in der Engine), und der Schalter zeigt seinen
+  Zustand („↔ waagerecht" / „↕ senkrecht"). Nebenfund im Test: `cellsFor` prüfte keine negativen
+  Koordinaten – das Rückwärtsdrehen hätte in `children[-40]` gegriffen.
+
+**Lobby:** Einstellungen **eingeklappt** (kein `open` mehr) und in vier `fieldset`-Gruppen:
+Salve · Täuschung · Fähigkeiten · Zeit & Bot. Alle Bereiche im Markup mit `mergeOptions()`
+abgeglichen – sie stimmten schon. Neu als Option: **Aufgabe nach verpassten Zügen** (`timeoutForfeit`,
+Standard 2, 0 = nie), seit der ersten Sitzung als „möglicherweise hart" notiert. `onTimeout` ist
+dafür exportiert. **Notizschicht** ist vom Nutzer gestrichen.
+
+**Werkzeug:** `tools/shot.mjs` kennt jetzt `lobby` und `placement`. Chrome läuft nur außerhalb
+der Sandbox des Agenten – innerhalb antwortet es auch auf `--version` mit nichts.
+
+**Gelernt:** Bei der Gegenprobe (Fehler kurz einbauen, Test muss fallen) habe ich `rooms.js` per
+`git checkout --` zurückgesetzt – und damit alle eigenen, noch nicht committeten Änderungen an der
+Datei gleich mit. Aufgefallen nur, weil `git diff --stat` die Datei danach nicht mehr nannte.
+Regel in LEARNINGS.
+
+**Offen:** Playtest der neuen Aufstellung am Gerät; Bilanz für die Aufgabe-Grenze 0 im Spiel
+gegen Menschen (Partie ohne Ende, wenn beide schweigen – bewusst zugelassen, Raum-TTL 45 min).
+
 ## 2026-09-04 (Abschluss) · Regeltext nachgezogen, Übergabe gerichtet
 
 **Befund:** Die „Regeln in 90 Sekunden" im Spiel waren veraltet — dort stand weiter „um 1 Feld

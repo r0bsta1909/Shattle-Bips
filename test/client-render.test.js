@@ -183,7 +183,7 @@ test.afterEach(() => {
   while (timers.length) clearInterval(timers.pop());
 });
 
-async function bootClient() {
+async function bootClient(env = {}) {
   const { doc, byId } = makeDoc();
   const sockets = [];
 
@@ -192,12 +192,13 @@ async function bootClient() {
 
   globalThis.document = doc;
   globalThis.window = { scrollTo() {}, addEventListener() {} };
-  globalThis.location = { protocol: 'https:', host: 'x', origin: 'https://x', hash: '' };
-  globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+  globalThis.location = { protocol: 'https:', host: 'x', origin: 'https://x', hash: env.hash || '' };
+  const gespeichert = env.storage || {};
+  globalThis.localStorage = { getItem: (k) => gespeichert[k] ?? null, setItem(k, v) { gespeichert[k] = v; }, removeItem(k) { delete gespeichert[k]; } };
   globalThis.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ label: 'v0.0.0-test', commit: 'abc1234' }) });
   globalThis.WebSocket = class {
-    constructor() { this.readyState = 1; sockets.push(this); }
-    send() {}
+    constructor() { this.readyState = 1; this.sent = []; sockets.push(this); }
+    send(x) { this.sent.push(JSON.parse(x)); }
     close() {}
   };
   Object.defineProperty(globalThis, 'navigator', {
@@ -210,7 +211,7 @@ async function bootClient() {
 
   const ws = sockets[0];
   assert.ok(ws && typeof ws.onmessage === 'function', 'Client hat eine Verbindung geoeffnet');
-  return { doc, byId, feed: (msg) => ws.onmessage({ data: JSON.stringify(msg) }) };
+  return { doc, byId, ws, feed: (msg) => ws.onmessage({ data: JSON.stringify(msg) }) };
 }
 
 const FLEET = [
@@ -639,4 +640,87 @@ test('Manövermodus holt das eigene Brett nach vorn', async () => {
 
   byId.get('btn-maneuver-cancel').onclick();
   assert.equal(byId.get('pane-foe')._classes.has('active'), true, 'Abbrechen führt zurück');
+});
+
+// ------------------------------------------------------------ Issue #26
+test('#26 Lobby-Link ohne bekannten Namen fragt erst nach dem Namen', async () => {
+  // Auf dem Telefon sass man nach dem Link sofort als "Kapitaen" in der Lobby -
+  // der Client trat bei, ohne dass je ein Name eingegeben worden war.
+  const { byId, ws, feed } = await bootClient({ hash: '#NZRM' });
+  feed({ t: 'welcome', playerId: null, resumed: false });
+  assert.equal(ws.sent.some((m) => m.t === 'joinLobby'), false, 'kein Beitritt ohne Namen');
+  assert.equal(byId.get('code').value, 'NZRM', 'Code steht im Feld');
+  assert.match(byId.get('join-hint').textContent, /NZRM/, 'Hinweis nennt die Lobby');
+  assert.equal(byId.get('screen-start')._classes.has('active'), true, 'Startbildschirm bleibt');
+
+  // Name eingeben und Beitreten: jetzt geht es hinein, mit diesem Namen.
+  byId.get('name').value = 'Rob';
+  byId.get('btn-join').onclick();
+  const join = ws.sent.find((m) => m.t === 'joinLobby');
+  assert.ok(join && join.code === 'NZRM' && join.name === 'Rob');
+});
+
+test('#26 Lobby-Link mit gespeichertem Namen tritt direkt bei (#15 bleibt)', async () => {
+  const { ws, feed } = await bootClient({ hash: '#NZRM', storage: { 'nebel.name': 'Rob' } });
+  feed({ t: 'welcome', playerId: null, resumed: false });
+  const join = ws.sent.find((m) => m.t === 'joinLobby');
+  assert.ok(join, 'Beitritt ohne Umweg');
+  assert.equal(join.name, 'Rob');
+});
+
+// ------------------------------------------------------- Issues #27/#28
+async function aufstellung() {
+  const { byId, feed } = await bootClient();
+  feed({ t: 'lobby', code: 'AB12', status: 'lobby', options: stateMsg().options, players: [{ name: 'Rob', ready: false }, null] });
+  byId.get('btn-to-placement').onclick();
+  return { byId, feed, grid: byId.get('place-grid') };
+}
+const belegt = (grid) => grid.children.map((c, i) => (c._classes.has('ship') ? i : -1)).filter((i) => i >= 0);
+
+test('#27 Ein gesetztes Schiff antippen dreht es an Ort und Stelle', async () => {
+  // Der Knopf "Drehen (R)" schaltete nur die Ausrichtung des NAECHSTEN Objekts
+  // um; ein liegendes Schiff liess sich auf dem Telefon gar nicht mehr drehen.
+  const { grid } = await aufstellung();
+  grid.children[0].onclick();                       // Traeger waagerecht A1..E1
+  assert.deepEqual(belegt(grid), [0, 1, 2, 3, 4]);
+  grid.children[2].onclick();                       // mitten auf das Schiff tippen
+  assert.deepEqual(belegt(grid), [0, 10, 20, 30, 40], 'jetzt senkrecht, um das erste Feld');
+  grid.children[20].onclick();
+  assert.deepEqual(belegt(grid), [0, 1, 2, 3, 4], 'und wieder zurueck');
+});
+
+test('#27 Am Rand dreht es rueckwaerts um dasselbe Feld', async () => {
+  const { grid } = await aufstellung();
+  grid.children[95].onclick();                      // Traeger F10..J10, unterste Reihe
+  assert.deepEqual(belegt(grid), [95, 96, 97, 98, 99]);
+  grid.children[97].onclick();
+  assert.deepEqual(belegt(grid), [55, 65, 75, 85, 95], 'senkrecht nach oben, Fuss bleibt auf F10');
+});
+
+test('#27 Passt es gedreht nicht, bleibt es liegen und sagt warum', async () => {
+  const { byId, grid } = await aufstellung();
+  grid.children[0].onclick();                       // Traeger A1..E1
+  grid.children[20].onclick();                      // Schlachtschiff A3..D3, zwei Reihen darunter
+  assert.deepEqual(belegt(grid), [0, 1, 2, 3, 4, 20, 21, 22, 23]);
+  grid.children[1].onclick();                       // Traeger drehen: A1..A5 beruehrt A3
+  assert.deepEqual(belegt(grid), [0, 1, 2, 3, 4, 20, 21, 22, 23], 'unveraendert');
+  assert.match(byId.get('place-error').textContent, /Träger passt gedreht nicht/);
+});
+
+test('#28 Der Ausrichtungsschalter zeigt seinen Zustand', async () => {
+  // "Drehen (R)" liess offen, was er tut, und die Taste R gibt es mobil nicht.
+  const { byId } = await aufstellung();
+  assert.match(byId.get('btn-rotate').textContent, /waagerecht/);
+  byId.get('btn-rotate').onclick();
+  assert.match(byId.get('btn-rotate').textContent, /senkrecht/);
+  assert.equal(byId.get('orient').textContent, 'senkrecht');
+});
+
+test('#8 Endbildschirm nennt die eingestellte Aufgabe-Grenze', async () => {
+  const { byId, feed } = await bootClient();
+  const m = stateMsg();
+  feed(m);
+  feed(stateMsg({ status: 'finished', winner: 1, endReason: 'timeout',
+    options: { ...m.options, timeoutForfeit: 3 }, reveal: { own: m.own, foe: m.own } }));
+  assert.match(byId.get('end-detail').textContent, /drei Züge in Folge/);
 });

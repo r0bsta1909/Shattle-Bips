@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   createRoom, joinRoom, setOptions, setPlacement, tryStart,
   voteRematch, withdrawPlacement, lobbyState, pushState, closeRoom,
-  declineRematch, markDisconnected, leaveGame, rebind, getRoom
+  declineRematch, markDisconnected, leaveGame, rebind, getRoom, onTimeout
 } from '../server/rooms.js';
 import { randomPlacement, mergeOptions, DEFAULT_OPTIONS, baseSalvo } from '../server/rules.js';
 
@@ -209,6 +209,23 @@ test('#8 Der Zustand traegt den Grund fuer das Partieende', () => {
   // Ein Sieg durch Zeitablauf ohne versenktes Schiff sah wie ein Fehler aus,
   // weil der Endbildschirm nur "Partie nach N Zügen beendet" zeigte.
   assert.equal(lastState(ws).endReason, 'timeout');
+});
+
+test('#8 Aufgabe-Grenze ist einstellbar: 3 verpasste Zuege, oder nie', () => {
+  // Die Regel "zwei verpasste Zuege = Aufgabe" war seit der ersten Sitzung als
+  // moeglicherweise hart vermerkt und fest verdrahtet. Jetzt Lobby-Option.
+  const { room } = botGame({ timeoutForfeit: 3 });
+  onTimeout(room); room.game.turn = 0;
+  onTimeout(room); room.game.turn = 0;
+  assert.equal(room.game.status, 'playing', 'nach zwei verpassten Zuegen laeuft sie noch');
+  onTimeout(room);
+  assert.equal(room.game.status, 'finished');
+  assert.equal(room.game.endReason, 'timeout');
+
+  const nie = botGame({ timeoutForfeit: 0 });
+  for (let i = 0; i < 6; i++) { onTimeout(nie.room); nie.room.game.turn = 0; }
+  assert.equal(nie.room.game.status, 'playing', '0 = nie aufgeben');
+  assert.equal(nie.room.timeoutStreak[0], 6);
 });
 
 // --------------------------------------------------------- Issues #13/#14

@@ -35,6 +35,11 @@ export const DEFAULT_OPTIONS = {
   diveEnabled: true,
   maneuverEnabled: true,
   turnSeconds: 60,
+  // Wie viele Zuege in Folge verstreichen duerfen, bevor die Partie als
+  // aufgegeben gilt. 0 = nie: dann laeuft sie, bis jemand zurueckkommt.
+  // Seit der ersten Sitzung als "moeglicherweise hart" vermerkt und fest auf
+  // 2 verdrahtet - jetzt einstellbar.
+  timeoutForfeit: 2,
   // Salven-Vorrat: begrenzt, wie OFT eine volle Salve geschossen werden darf,
   // nicht wie gross sie ist. Jeder Zug ist eine Entscheidung – Salve kostet
   // eine aus dem Vorrat, Einzelschuss kostet nichts. Ist er leer, geht nur
@@ -71,6 +76,7 @@ export function mergeOptions(raw = {}) {
   o.decoyCount = num(raw.decoyCount, 0, 4, o.decoyCount);
   o.decoyLen = num(raw.decoyLen, 1, 3, o.decoyLen);
   o.turnSeconds = num(raw.turnSeconds, 15, 300, o.turnSeconds);
+  o.timeoutForfeit = num(raw.timeoutForfeit, 0, 5, o.timeoutForfeit);
   o.salvoPoolSize = num(raw.salvoPoolSize, 0, 30, o.salvoPoolSize);
   o.botMinSeconds = num(raw.botMinSeconds, 0, 30, o.botMinSeconds);
   o.botMaxSeconds = num(raw.botMaxSeconds, 0, 30, o.botMaxSeconds);

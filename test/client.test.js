@@ -313,6 +313,24 @@ test('Jede Lobby-Option ist im Formular einstellbar und wird gesendet', () => {
   assert.deepEqual(nichtGelesen, [], `nicht ins Formular zurückgeschrieben: ${nichtGelesen.join(', ')}`);
 });
 
+test('Einstellungen sind eingeklappt und in Gruppen', () => {
+  // Der Regelsatz der Voreinstellung ist der gespielte. Wer daran dreht, tut
+  // es absichtlich und klappt auf - ein Gast soll nicht zuerst 18 Felder sehen.
+  const card = /<details[^>]*id="opt-card"[^>]*>/.exec(html);
+  assert.ok(card, 'Einstellungskarte gefunden');
+  assert.ok(!/\bopen\b/.test(card[0]), 'nicht von selbst aufgeklappt');
+
+  // Jede Option steht in einer benannten Gruppe, nicht in der flachen Liste.
+  const block = /id="opt-card"[\s\S]*?<\/details>/.exec(html)[0];
+  const gruppen = [...block.matchAll(/<fieldset class="opt-group">\s*<legend>([^<]+)<\/legend>([\s\S]*?)<\/fieldset>/g)];
+  assert.ok(gruppen.length >= 3 && gruppen.length <= 5, `3 bis 5 Gruppen, nicht ${gruppen.length}`);
+  const inGruppe = new Set(gruppen.flatMap((g) => [...g[2].matchAll(/id="(o-[\w-]+)"/g)].map((m) => m[1])));
+  const alle = [...block.matchAll(/id="(o-[\w-]+)"/g)].map((m) => m[1]);
+  const lose = alle.filter((id) => !inGruppe.has(id));
+  assert.deepEqual(lose, [], `ausserhalb jeder Gruppe: ${lose.join(', ')}`);
+  for (const g of gruppen) assert.ok(g[2].includes('id="o-'), `Gruppe „${g[1]}“ ist leer`);
+});
+
 // ------------------------------------------------ Mittelspalte am PC
 test('Mittelspalte: Kommandofeld und Funk füllen sie ohne Lücke', () => {
   // Standen Bedienung und Funk in zwei RASTERREIHEN, ueber die die Bretter

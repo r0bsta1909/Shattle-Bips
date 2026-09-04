@@ -17,9 +17,9 @@ Spielbar gegen Bot und online, mobil wie am PC. Was über Standard-Schiffeversen
 Satz, aus dem alles folgt: *Das Orakel lügt nie, getäuscht wird über wahre Meldungen.*
 Am Partieende zeigt die **Täuschungsbilanz**, was das bewirkt hat.
 
-Was noch fehlt, steht unter „Noch offen" in der [README](README.md) und im Logbuch. Zwei Dinge
-wurden ausdrücklich vertagt: eine **Notizschicht** auf dem Gegnerraster und ein Modus, der
-**Wiederkehr** erzeugt (Rätsel des Tages). Für beide gilt die Vorgabe des Nutzers:
+Was noch fehlt, steht unter „Noch offen" in der [README](README.md) und im Logbuch. Vertagt ist
+ein Modus, der **Wiederkehr** erzeugt (Rätsel des Tages); eine **Notizschicht** auf dem
+Gegnerraster wurde am 2026-09-04 vom Nutzer **gestrichen**. Für Neues gilt seine Vorgabe:
 
 > Handarbeit, die das System auch erledigen könnte, ist keine Spieltiefe. Hinhören oder
 > Hinsehen muss **belohnt** werden.
@@ -88,6 +88,8 @@ npm run e2e:feedback      # /version und /api/feedback über echtes HTTP
 node tools/sim.mjs 800 --singleShotAfterHit    # Balancing mit Lobby-Optionen
 node tools/shot.mjs 1440x900                   # Layout ansehen, ohne zu spielen
 node tools/shot.mjs 390x844 maneuver            # hochkant, mit offenem Manöverfeld
+node tools/shot.mjs 390x844 lobby               # Lobby mit aufgeklappten Einstellungen
+node tools/shot.mjs 390x844 placement           # Aufstellung
 ```
 
 **Vor jedem Push:** `npm test` **und** alle vier e2e-Suiten. Sie sind schnell und haben in

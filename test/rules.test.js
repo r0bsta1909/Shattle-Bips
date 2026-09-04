@@ -208,6 +208,13 @@ test('Optionen: Grenzen werden erzwungen und max < min korrigiert', () => {
   assert.equal(o.decoyCount, 4);
 });
 
+test('Option: Aufgabe-Grenze ist geklammert, 0 heisst nie', () => {
+  assert.equal(DEFAULT_OPTIONS.timeoutForfeit, 2, 'Voreinstellung bleibt die alte feste Regel');
+  assert.equal(mergeOptions({ timeoutForfeit: 0 }).timeoutForfeit, 0);
+  assert.equal(mergeOptions({ timeoutForfeit: 99 }).timeoutForfeit, 5);
+  assert.equal(mergeOptions({ timeoutForfeit: 'x' }).timeoutForfeit, 2);
+});
+
 test('Option: Eröffnungsausgleich abschaltbar', () => {
   const g = mkOpt({ openingBalance: false });
   assert.equal(baseSalvo(g, 0), 4);

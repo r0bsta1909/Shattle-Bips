@@ -280,6 +280,16 @@ die Regel lautet: „ein Knopf wird nie schmaler als seine Beschriftung" (`min-w
 „die Knöpfe stehen untereinander". Ein Test, der beim Umbau lärmt, wird beim nächsten Mal
 gelockert statt gelesen.
 
+### Gegenprobe nur mit Sicherungskopie, nie mit `git checkout --`
+**Symptom:** Nach dem Beweis „Test fällt am alten Stand" fehlten in `rooms.js` die neue Option und
+der Export – `git diff --stat` nannte die Datei nicht mehr.
+**Ursache:** Die Sabotage wurde mit `git checkout -- datei` zurückgenommen. Das setzt auf den
+**Commit** zurück, nicht auf den Stand vor der Sabotage – alle eigenen, noch nicht committeten
+Änderungen an der Datei waren weg.
+**Regel:** Vor der Gegenprobe `cp datei /tmp/datei.bak`, danach `cp` zurück. `git checkout --`
+nur auf Dateien, die im Diff nichts Eigenes tragen. Und nach jeder Gegenprobe `git diff --stat`
+lesen: fehlt eine Datei, die man angefasst hat, ist etwas verloren.
+
 ### Ein Test, der eine Ortsangabe prüft, prüft nicht die Regel
 Der `--cs`-Test verlangte: „im **ersten** `@media(min-width:780px)`-Block steht kein `--cs`".
 Gemeint war: „die Höhenkopplung darf nirgends verloren gehen". Ein zweiter Block hätte die

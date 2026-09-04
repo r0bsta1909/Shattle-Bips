@@ -83,18 +83,22 @@ npm start          # http://localhost:3000
 ```
 
 Zwei Browserfenster öffnen, in einem „Lobby erstellen", im anderen den 4-stelligen Code
-eingeben. Oder direkt „Gegen Bot spielen".
+eingeben. Oder direkt „Gegen Bot spielen". Ein Lobby-Link (`/#CODE`) führt direkt hinein –
+sofern ein Name bekannt ist; sonst fragt die Startseite erst danach.
 
 ## Testeinstellungen
 
 In der Lobby stellt der **Host** die Regeln ein, bevor aufgestellt wird. Damit lässt sich jede
-Stellschraube im Playtest verschieben, ohne Code anzufassen:
+Stellschraube im Playtest verschieben, ohne Code anzufassen. Das Formular ist **eingeklappt** und
+in vier Gruppen geteilt (Salve · Täuschung · Fähigkeiten · Zeit & Bot) – die Voreinstellung ist
+der gespielte Regelsatz, wer daran dreht, tut es absichtlich:
 
 | Einstellung | Standard | Wirkung |
 |---|---|---|
 | Salve min / max | 2 / 4 | Klammer um „Schüsse = lebende Schiffe" |
 | Köder-Anzahl / -Länge | 2 / 2 | 0 Köder = klassisches Spiel; 3×3 = Bluff-Maximum |
 | Zugzeit | 60 s | Timeout gibt den Zug ab |
+| Aufgabe nach verpassten Zügen | 2 | so viele Züge in Folge verstreichen lassen = Aufgabe. **0 = nie** |
 | Eröffnungsausgleich | an | Startspieler hat im ersten Zug 1 Schuss |
 | **Nach Treffer nur Einzelschuss** | aus | Jagdmodus: wer im letzten Zug getroffen hat, schießt nur einmal |
 | Aufklärung / Tauchen / Manöver | an | einzeln abschaltbar |
@@ -146,7 +150,7 @@ wieder in beiden Zielkorridoren (52,4 % / 40,2 %). Und er verlängert die Partie
 ## Tests
 
 ```bash
-npm test              # 113 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung, Playtest-Regressionen
+npm test              # 164 Tests (node:test): Regeln, Optionen, Sim-CLI, Feedback, Client-Kopplung, Playtest-Regressionen
 npm run e2e           # vollständige Partie gegen den Bot über WebSocket
 npm run e2e:lobby     # zwei Clients, Lobby erstellen + beitreten
 npm run e2e:options   # Optionen, Zug-Timeout und Revanche
@@ -214,11 +218,11 @@ Zahlen sind eine Untergrenze und ersetzen keinen Playtest mit Menschen.
 ## Abweichungen von der Spec v1.0
 
 - **Client-Raster als DOM statt Canvas.** Klick-Handling, Hover-Vorschau und Barrierefreiheit sind ohne Canvas einfacher und robuster.
-- **Aufstellung per Klick statt Drag & Drop.** Schiff wählen, Feld klicken, `R` oder Rechtsklick dreht. Weniger Code, auf Touch besser bedienbar.
+- **Aufstellung per Klick statt Drag & Drop.** Feld antippen setzt das nächste Objekt; ein **gesetztes Schiff antippen dreht es** an Ort und Stelle. Der Ausrichtungsschalter zeigt seinen Zustand („↔ waagerecht"), am PC gehen zusätzlich `R` und Rechtsklick. Weniger Code, auf Touch besser bedienbar.
 - **Ein Client-Modul** (`public/js/app.js`) statt fünf. Bei dieser Größe ist die Aufteilung Ballast.
 - **Neue Regel: Ausweich-Rücksetzung.** Der Sim deckte auf, dass ein getauchtes U-Boot sonst dauerhaft unversenkbar wird — das betroffene Feld bliebe für immer als Wasser markiert und ~3 % der Partien liefen endlos. Deshalb werden nach einem Ausweichmanöver alle Wasser-Meldungen der Salve zurückgesetzt.
 - **Scan und Tauchen senken die Salve auf minimal 1** (nicht 2). Sonst wären beide bei zwei verbliebenen Schiffen kostenlos.
-- **Kein Zeitbank-System.** Ein abgelaufener Zug geht an den Gegner. Die Bank hatte den Timer faktisch mehrfach neu gestartet, was wie ein Fehler wirkte statt wie eine Regel. Zwei Timeouts in Folge gelten als Aufgabe — der Endbildschirm sagt das seit dem ersten Playtest auch dazu, vorher sah ein Sieg ohne versenktes Schiff wie ein Fehler aus.
+- **Kein Zeitbank-System.** Ein abgelaufener Zug geht an den Gegner. Die Bank hatte den Timer faktisch mehrfach neu gestartet, was wie ein Fehler wirkte statt wie eine Regel. Zwei Timeouts in Folge gelten als Aufgabe (einstellbar, 0 = nie) — der Endbildschirm sagt das seit dem ersten Playtest auch dazu, vorher sah ein Sieg ohne versenktes Schiff wie ein Fehler aus.
 - **Der Server sagt, warum ein Knopf gesperrt ist.** `canScan`/`canDive` reichen dem Client nicht nur ein Ja/Nein, sondern mit `scanBlocked` auch den Grund. Ein gesperrter Knopf ohne Begründung erzeugt sonst genau die Fehlermeldungen, die im Playtest kamen.
 - **Die Aufstellung ist gesperrt, sobald der Server sie hat.** Sonst ändert der Client sie weiter, während der Server die alte hält — der Spieler sieht dann eine andere Flotte, als gespielt wird.
 
@@ -324,6 +328,4 @@ Zweck da.
 - Replay-Overlay mit der Wahrscheinlichkeitskarte nach Partieende.
 - Bot-Abnahme gegen Menschen: Zielkorridor 55–65 % Siegrate gegen erfahrene Spieler.
 - Der Jagdmodus und der Salven-Vorrat sind simuliert, aber nicht gegen Menschen gespielt.
-- Timeout-Regel (zwei verpasste Züge = Aufgabe) ist fest verdrahtet — Kandidat für eine Option.
-- Die Lobby hat 17 Einstellungen in einer flachen Liste. Vor der nächsten wäre Gruppierung fällig.
 - Feedback in der Memory-Senke überlebt keinen Neustart. Das ist Absicht — wer es dauerhaft braucht, nimmt `github` oder `webhook`.

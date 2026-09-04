@@ -84,6 +84,14 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:10px}
 .opts .chk{grid-column:1/-1;display:flex;align-items:center;gap:9px;color:var(--ink);font-size:14px}
 .opts .chk input{width:20px;height:20px;min-height:0;padding:0}
+/* Einstellungen in Gruppen: 18 Felder in einer flachen Liste liessen sich
+   nicht mehr ueberblicken. Der Rahmen ist bewusst leise, die Legende traegt. */
+.opt-group{border:1px solid var(--line);border-radius:10px;padding:4px 12px 12px;margin:12px 0 0;min-width:0}
+.opt-group legend{padding:0 6px;font-size:12px;font-weight:700;color:var(--accent);
+  text-transform:uppercase;letter-spacing:.08em}
+.opt-group .opts{margin-top:4px}
+.hint.accent{color:var(--accent)}
+#join-hint:empty{display:none}
 
 /* Raster */
 .grid{display:grid;grid-template-columns:repeat(10,var(--cs));gap:2px;

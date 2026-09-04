@@ -10,6 +10,8 @@
 //   node tools/shot.mjs 393x852                  # hochkant
 //   node tools/shot.mjs 1440x900 maneuver        # mit geoeffnetem Manoevermodus
 //   node tools/shot.mjs 1440x900 normal out.png  # Ziel selbst waehlen
+//   node tools/shot.mjs 393x852 lobby            # Lobby mit aufgeklappten Einstellungen
+//   node tools/shot.mjs 393x852 placement        # Aufstellung mit halber Flotte
 //
 // Der Prüfstand fuellt die Raster und Listen mit Platzhaltern - er beweist
 // deshalb Geometrie, nicht Spiellogik. Dafuer sind die e2e-Laeufe da.
@@ -47,7 +49,11 @@ function seite() {
   html = html.replace('<link rel="stylesheet" href="/css/style.css">',
     `<style>${readFileSync(path.join(ROOT, 'public/css/style.css'), 'utf8')}</style>`);
   html = html.replace('id="screen-start" class="screen active"', 'id="screen-start" class="screen"');
-  html = html.replace('id="screen-game" class="screen"', 'id="screen-game" class="screen active"');
+  // Welcher Bildschirm: Spiel (normal/maneuver), Lobby oder Aufstellung.
+  const screen = modus === 'lobby' ? 'screen-lobby' : modus === 'placement' ? 'screen-placement' : 'screen-game';
+  html = html.replace(`id="${screen}" class="screen"`, `id="${screen}" class="screen active"`);
+  // Die Einstellungen sind absichtlich eingeklappt - fuers Foto aufklappen.
+  if (modus === 'lobby') html = html.replace('id="opt-card">', 'id="opt-card" open>');
   // app.js braucht einen Server und eine Partie - hier fuellt ein Platzhalter.
   html = html.replace('<script type="module" src="/js/app.js"></script>', '');
   if (modus === 'maneuver') {
@@ -59,6 +65,21 @@ function seite() {
 function fuellung() {
   const flotte = [['\u2b1f', 'Träger', 5], ['\u25cf', 'Schlachtschiff', 4],
     ['\u25c6', 'Kreuzer', 3], ['\u25c9', 'U-Boot', 3], ['\u25aa', 'Zerstörer', 2]];
+  if (modus === 'lobby') return `<script>
+document.getElementById('lobby-code').textContent = 'NZRM';
+document.getElementById('join-url').value = 'https://shattle-bips.onrender.com/#NZRM';
+for (const t of ['Rob – du — stellt auf…', 'wartet auf Mitspieler…']) {
+  const li = document.createElement('li'); li.textContent = t; document.getElementById('lobby-players').appendChild(li);
+}
+</script>`;
+  if (modus === 'placement') return `<script>
+const grid = document.getElementById('place-grid');
+for (let i = 0; i < 100; i++) { const d = document.createElement('div'); d.className = 'cell'; grid.appendChild(d); }
+for (const i of [0,1,2,3,4, 20,21,22,23, 60,70,80]) grid.children[i].classList.add('ship');
+const ul = document.getElementById('ship-list');
+[['Träger (5)','done'],['Schlachtschiff (4)','done'],['Kreuzer (3)','done'],['U-Boot (3)','active'],['Zerstörer (2)',''],['Köder 1 (2)',''],['Köder 2 (2)','']]
+  .forEach(([t, c]) => { const li = document.createElement('li'); li.textContent = t; if (c) li.className = c; ul.appendChild(li); });
+</script>`;
   return `<script>
 const A = 'ABCDEFGHIJ';
 function rahmen(id){
