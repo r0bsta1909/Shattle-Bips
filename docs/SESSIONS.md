@@ -7,6 +7,58 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-04 (Fortsetzung) · Manöver und Tauchen aufgewertet
+
+Aus dem Gespräch über Player Agency. Vorher gemessen: **Tauchen und Manöver *sind* der
+Catch-up-Mechanismus** — jedes für sich trägt gut vier Prozentpunkte Comeback-Rate. Deshalb
+wurden sie gestärkt, statt einen neuen Ausgleich zu erfinden.
+
+**Geändert**
+- **Drehen am Rand** repariert: gedreht wurde immer um das erste Feld, ein Schiff in der
+  untersten Reihe bräuchte dafür eine Reihe 11. Jetzt notfalls rückwärts um **dasselbe** Feld —
+  bewusst nicht um das andere Ende, sonst hätte derselbe Knopf vier mögliche Ergebnisse.
+- **Reichweite nach Schiffsgröße:** bis 3 Felder die volle Weite (`maneuverRange`, Standard 2),
+  ab 4 Feldern die Hälfte. Träge Kähne, wendige Boote.
+- **Scheinmanöver** (`fakeManeuver`): den Zug für einen Manöver*befehl* ausgeben, ohne etwas zu
+  bewegen. Der Gegner hört dieselbe Meldung — damit wird **jedes** „Flotte manövriert"
+  mehrdeutig. Ein Manöver ist ein Befehl, keine Ortsveränderung; das Orakel lügt also nicht.
+- **Tauchfahrt** (`diveMoveRange`, Standard 3): ganzer Zug statt eines Schusses, dafür taucht
+  das U-Boot **und** verlegt sich weiter. Die einzige Fähigkeit, die kein anderes Schiff hat.
+- **Erreichbare Felder werden angezeigt**, Richtungen ohne Ziel sind gesperrt. Berechnet der
+  Server (`maneuverOptions`) — sonst müsste der Client Halo, Beschuss und Reichweite als zweite
+  Fassung der Regeln nachbauen. Bewusst **keine** automatische Zielempfehlung.
+
+**Drei Fehler gefunden, die die Messung erst ermöglicht hat**
+1. **Der Bot würfelte Manöver blind.** Scheiterte die Position, fiel er stumm auf eine Salve
+   zurück: die Heuristik war auf ~9 Manöver je Partie eingestellt, herausgekommen sind **3**.
+   Er wählt jetzt aus `maneuverOptions`; die Wahrscheinlichkeiten wurden entsprechend von
+   0,20/0,35 auf 0,07/0,15 zurückgedreht, damit die getunte Häufigkeit erhalten bleibt.
+2. **Der Simulator reichte die neuen Argumente nicht durch** und maß deshalb einen Regelsatz,
+   den niemand spielt — `maneuverRange` und `diveMoveRange` sahen wirkungslos aus.
+3. **`maneuverRange` 3 und 4 taten nichts**, weil die Schiffsgröße hart auf 2 deckelte.
+
+**Balance** (500 Partien, Seed 7) — alter gegen neuen Regelsatz, beide mit repariertem Bot:
+
+| | Startvorteil | Comeback | Züge |
+|---|---|---|---|
+| alte Werte | 49,4 % | 39,4 % | 39,9 |
+| **neue Voreinstellung** | 51,4 % | **39,4 %** | 40,5 |
+
+Über weitere Seeds: Startvorteil 45,6–51,4 %, Comeback 37,8–41,6 % — beide Korridore gehalten.
+Zwischenzeitlich lag der Comeback bei 33 %; das war reines Artefakt des übermanövrierenden Bots.
+
+**Gelernt**
+- **Beweglichkeit hilft dem Gesunden — also dem Führenden.** Manöver brauchen unbeschädigte
+  Schiffe. Als der Bot dreimal so oft manövrierte, fiel die Comeback-Rate unter den Korridor.
+- Naiver Catch-up schadet: `minSalvo` 2 → 3 senkt den Comeback von 42 auf 38,8 %, weil mehr
+  Feuerkraft die Partie verkürzt und kurze Partien dem Führenden gehören.
+
+**Offen**
+- Kandidat für eine weitere Option: die Timeout-Regel (zwei verpasste Züge = Aufgabe) ist seit
+  der ersten Sitzung als „möglicherweise hart" vermerkt und weiter fest verdrahtet.
+- Die Lobby hat jetzt **17** Einstellungen in einer flachen Liste. Ab hier wäre eine Gruppierung
+  fällig, bevor die nächste dazukommt.
+
 ## 2026-09-04 (Fortsetzung) · Täuschungsbilanz und Ton — beide am Ereignisstrom
 
 Aus der Frage nach dem USP. Befund: **der USP fehlt nicht, er ist unsichtbar.** Köder, Tauchen

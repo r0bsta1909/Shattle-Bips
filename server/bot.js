@@ -5,7 +5,7 @@
 import {
   N, CELLS, FLEET_SPEC, UNKNOWN, WATER, HIT,
   ix, rc, orth, lineCells, randomPlacement, DEFAULT_OPTIONS,
-  aliveShips, shipAlive, sub, baseSalvo, requiredShots, shotsAvailable
+  aliveShips, shipAlive, sub, baseSalvo, requiredShots, shotsAvailable, maneuverOptions
 } from './rules.js';
 
 export function createBotBrain(rand = Math.random) {
@@ -177,15 +177,53 @@ export function planTurn(brain, game, slot) {
       const near = s.cells.some((cell) => orth(cell).some((n) => me.incoming.has(n)));
       if (near) threatened.push(i);
     }
-    const bluff = brain.rand() < 0.20;
-    if ((threatened.length && brain.rand() < 0.35) || bluff) {
+    // Diese Werte waren dafuer getunt, dass rund zwei Drittel der Versuche an
+    // einer illegalen Zielposition scheiterten - herausgekommen sind ~3
+    // Manoever je Partie. Seit der Bot nur noch legale Zuege waehlt, wuerden
+    // dieselben Werte ~9 ergeben, also fast jeder vierte Zug ohne Schuss.
+    const bluff = brain.rand() < 0.07;
+    if ((threatened.length && brain.rand() < 0.15) || bluff) {
       const pool = threatened.length ? threatened
         : me.ships.map((s, i) => (s.hits.length === 0 ? i : -1)).filter((i) => i >= 0);
       if (pool.length) {
-        const shipIndex = pool[Math.floor(brain.rand() * pool.length)];
-        const moves = ['up', 'down', 'left', 'right', 'rotate'];
-        plan.maneuver = { shipIndex, move: moves[Math.floor(brain.rand() * moves.length)] };
-        return plan; // Manoever ersetzt die Salve
+        const o = game.options || {};
+        // Nur legale Zuege: was der Server ohnehin ausrechnet, muss der Bot
+        // nicht raten. Wuerfelte er blind, wuerde eine abgewiesene Bewegung
+        // stillschweigend zur normalen Salve - die Einstellung waere wirkungslos
+        // und der Bot manoevrierte in Wahrheit fast nie.
+        const erlaubt = maneuverOptions(game, slot);
+
+        // Scheinmanoever: bluffen, ohne etwas herzugeben. Ohne das waere der
+        // Bot berechenbar - "er hat manoevriert" hiesse dann immer "er hat
+        // wirklich bewegt", und die Mehrdeutigkeit gaebe es nur fuer Menschen.
+        if (erlaubt && erlaubt.fake && !threatened.length && brain.rand() < 0.4) {
+          plan.maneuver = { shipIndex: pool[0], move: 'hold' };
+          return plan;
+        }
+
+        const wahl = [];
+        for (const i of pool) {
+          const opt = erlaubt && erlaubt.ships ? erlaubt.ships[i] : null;
+          if (!opt) continue;
+          const ship = me.ships[i];
+          // Bedrohte Boote weichen wenn moeglich per Tauchfahrt aus: sie
+          // verlegt weiter UND taucht ab.
+          const tf = opt.diveMove && ship.type === 'uboot' && threatened.includes(i)
+            && brain.rand() < 0.5 ? opt.diveMove : null;
+          const q = tf || opt;
+          for (const mv of ['up', 'down', 'left', 'right', 'rotate']) {
+            const max = q.steps[mv] || 0;
+            if (max > 0) wahl.push({ shipIndex: i, move: mv, max, dive: !!tf });
+          }
+        }
+        if (wahl.length) {
+          const w = wahl[Math.floor(brain.rand() * wahl.length)];
+          // Bedrohte fahren so weit wie moeglich, Bluffs bummeln.
+          const steps = w.move === 'rotate' ? 1
+            : (threatened.includes(w.shipIndex) ? w.max : 1 + Math.floor(brain.rand() * w.max));
+          plan.maneuver = { shipIndex: w.shipIndex, move: w.move, steps, dive: w.dive };
+          return plan; // Manoever ersetzt die Salve
+        }
       }
     }
   }

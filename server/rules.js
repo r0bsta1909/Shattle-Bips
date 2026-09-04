@@ -46,7 +46,17 @@ export const DEFAULT_OPTIONS = {
   // Deshalb wird pro Zug neu gewuerfelt. 0/0 heisst ohne Pause – das brauchen
   // die e2e-Laeufe, sonst dauert eine Partie Minuten.
   botMinSeconds: 3,
-  botMaxSeconds: 6
+  botMaxSeconds: 6,
+  // Wie weit ein Manoever traegt. Grosse Schiffe (ab 4 Feldern) bleiben immer
+  // bei 1 - traege Truemmer. Auf 1 gesetzt ist alles wie vorher.
+  maneuverRange: 2,
+  // Scheinmanoever: den Zug fuer einen Manoeverbefehl ausgeben, ohne etwas zu
+  // bewegen. Der Gegner hoert dieselbe Meldung - damit wird JEDES "Flotte
+  // manoevriert" mehrdeutig, und die echten Manoever werden wertvoller.
+  fakeManeuver: true,
+  // Tauchfahrt: ganzer Zug statt einem Schuss, dafuer taucht das U-Boot UND
+  // verlegt sich. 0 schaltet sie ab.
+  diveMoveRange: 3
 };
 
 export function mergeOptions(raw = {}) {
@@ -64,10 +74,12 @@ export function mergeOptions(raw = {}) {
   o.salvoPoolSize = num(raw.salvoPoolSize, 0, 30, o.salvoPoolSize);
   o.botMinSeconds = num(raw.botMinSeconds, 0, 30, o.botMinSeconds);
   o.botMaxSeconds = num(raw.botMaxSeconds, 0, 30, o.botMaxSeconds);
+  o.maneuverRange = num(raw.maneuverRange, 1, 4, o.maneuverRange);
+  o.diveMoveRange = num(raw.diveMoveRange, 0, 5, o.diveMoveRange);
   // Wie bei minSalvo/maxSalvo: ein umgedrehter Bereich ist kein Fehler des
   // Nutzers, sondern eine halb fertige Eingabe. Obergrenze zieht nach.
   if (o.botMaxSeconds < o.botMinSeconds) o.botMaxSeconds = o.botMinSeconds;
-  for (const k of ['openingBalance', 'singleShotAfterHit', 'scanEnabled', 'diveEnabled', 'maneuverEnabled', 'salvoPool']) {
+  for (const k of ['openingBalance', 'singleShotAfterHit', 'scanEnabled', 'diveEnabled', 'maneuverEnabled', 'salvoPool', 'fakeManeuver']) {
     if (raw[k] !== undefined) o[k] = !!raw[k];
   }
   return o;
@@ -301,60 +313,179 @@ function endTurn(game) {
 // ------------------------------------------------------------------ Aktionen
 export function applyDive(game, slot) {
   if (game.status !== 'playing') return { ok: false, error: 'Partie läuft nicht.' };
-  if (!(game.options || DEFAULT_OPTIONS).diveEnabled) return { ok: false, error: 'Tauchen ist in dieser Partie deaktiviert.' };
   if (game.turn !== slot) return { ok: false, error: 'Nicht am Zug.' };
+  // Eine einzige Fassung der Tauchbedingungen: die Tauchfahrt prueft dieselbe.
+  const grund = diveBlockReason(game, slot);
+  if (grund) return { ok: false, error: grund };
   const p = game.players[slot];
-  if (p.divedThisTurn) return { ok: false, error: 'Bereits getaucht.' };
-  if (p.divedLastTurn) return { ok: false, error: 'Nicht zwei Züge hintereinander tauchen.' };
-  const s = sub(p);
-  if (!s || s.hits.length > 0) return { ok: false, error: 'U-Boot beschädigt oder versenkt.' };
   p.diving = true;
   p.divedThisTurn = true;
   game.log.push({ turn: game.turnCount, slot, kind: 'dive' });
   return { ok: true };
 }
 
-export function applyManeuver(game, slot, shipIndex, move) {
+export function applyManeuver(game, slot, shipIndex, move, extra = {}) {
+  const o = game.options || DEFAULT_OPTIONS;
   if (game.status !== 'playing') return { ok: false, error: 'Partie läuft nicht.' };
-  if (!(game.options || DEFAULT_OPTIONS).maneuverEnabled) return { ok: false, error: 'Manöver sind in dieser Partie deaktiviert.' };
+  if (!o.maneuverEnabled) return { ok: false, error: 'Manöver sind in dieser Partie deaktiviert.' };
   if (game.turn !== slot) return { ok: false, error: 'Nicht am Zug.' };
   const p = game.players[slot];
+
+  // Scheinmanöver: ein Manöver ist ein BEFEHL, keine Ortsveränderung –
+  // „Position halten" ist einer davon. Deshalb lügt das Orakel nicht, wenn es
+  // danach „Flotte manövriert" meldet. Der Sinn: jede solche Meldung wird
+  // mehrdeutig, und genau das macht die echten Manöver wertvoll.
+  if (move === 'hold') {
+    if (!o.fakeManeuver) return { ok: false, error: 'Scheinmanöver sind in dieser Partie deaktiviert.' };
+    p.lastSalvoHit = false;
+    game.log.push({ turn: game.turnCount, slot, kind: 'maneuver', fake: true, from: [], to: [] });
+    endTurn(game);
+    return { ok: true, notice: 'maneuvered' };
+  }
+
   const ship = p.ships[shipIndex];
   if (!ship) return { ok: false, error: 'Unbekanntes Schiff.' };
   if (ship.hits.length > 0) return { ok: false, error: 'Beschädigte Schiffe sind fixiert.' };
 
-  const [r0, c0] = rc(ship.cells[0]);
-  let cells = null, horiz = ship.horiz;
-  if (move === 'rotate') {
-    horiz = !ship.horiz;
-    cells = lineCells(r0, c0, ship.len, horiz);
-  } else {
-    const d = { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] }[move];
-    if (!d) return { ok: false, error: 'Unbekannte Bewegung.' };
-    cells = lineCells(r0 + d[0], c0 + d[1], ship.len, horiz);
+  // Tauchfahrt: das U-Boot ist das einzige Schiff, das sich verdeckt bewegen
+  // kann. Sie kostet den ganzen Zug statt eines Schusses – dafür trägt sie
+  // weiter, und das Boot ist danach getaucht.
+  const tauchfahrt = extra.dive === true;
+  if (tauchfahrt) {
+    const grund = diveBlockReason(game, slot, o);
+    if (grund) return { ok: false, error: grund };
+    if (ship.type !== 'uboot') return { ok: false, error: 'Nur das U-Boot kann tauchen.' };
+    if (o.diveMoveRange < 1) return { ok: false, error: 'Tauchfahrt ist in dieser Partie deaktiviert.' };
   }
-  if (!cells) return { ok: false, error: 'Zielposition liegt außerhalb des Rasters.' };
 
-  for (const i of cells) {
-    if (p.incoming.has(i)) return { ok: false, error: 'Dort wurde bereits hingeschossen.' };
-  }
-  const others = new Set();
-  for (const s of p.ships) if (s !== ship) for (const i of halo(s.cells)) others.add(i);
-  for (const d of p.decoys) for (const i of halo(d.cells)) others.add(i);
-  for (const i of cells) {
-    if (others.has(i)) return { ok: false, error: 'Zielposition berührt ein anderes Objekt.' };
-  }
+  const weite = tauchfahrt ? o.diveMoveRange : shipRange(ship, o);
+  const schritte = Math.max(1, Math.min(weite, Math.round(Number(extra.steps) || 1)));
+
+  const ziel = movedCells(ship, move, schritte);
+  if (!ziel) return { ok: false, error: 'Zielposition liegt außerhalb des Rasters.' };
+  const frei = placeBlockReason(p, ship, ziel.cells);
+  if (frei) return { ok: false, error: frei };
 
   const from = ship.cells.slice();
-  ship.cells = cells;
-  ship.horiz = horiz;
+  ship.cells = ziel.cells;
+  ship.horiz = ziel.horiz;
   ship.movedTurn = game.turnCount;
   p.lastSalvoHit = false;
+  if (tauchfahrt) { p.diving = true; p.divedThisTurn = true; }
   // `from` ist der Kern der Manoever-Bilanz: erst damit laesst sich hinterher
   // pruefen, ob ein spaeterer Schuss das Schiff getroffen HAETTE.
-  game.log.push({ turn: game.turnCount, slot, kind: 'maneuver', shipType: ship.type, from, to: cells.slice() });
+  game.log.push({
+    turn: game.turnCount, slot, kind: 'maneuver', shipType: ship.type,
+    from, to: ziel.cells.slice(), steps: schritte, dive: tauchfahrt
+  });
   endTurn(game);
   return { ok: true, notice: 'maneuvered' };
+}
+
+/**
+ * Wie weit dieses Schiff traegt. Kleine Schiffe (bis 3 Felder) sind wendig und
+ * bekommen die volle eingestellte Weite, grosse nur die Haelfte - traege
+ * Kaehne. Vorher war die Obergrenze fest 2 bzw. 1; damit taten die
+ * Einstellungen 3 und 4 nachweislich gar nichts.
+ */
+export function shipRange(ship, o = DEFAULT_OPTIONS) {
+  const w = o.maneuverRange || DEFAULT_OPTIONS.maneuverRange;
+  return ship.len <= 3 ? w : Math.max(1, Math.floor(w / 2));
+}
+
+/**
+ * Zielfelder fuer eine Bewegung. Beim Drehen werden BEIDE Enden als Angelpunkt
+ * versucht: um das erste Feld gedreht scheitert ein Schiff am unteren oder
+ * rechten Rand, um das letzte gedreht geht es problemlos. Vorher hiess das
+ * schlicht „geht nicht", was am Rand keinen Sinn ergab.
+ */
+function movedCells(ship, move, schritte) {
+  if (move === 'rotate') {
+    const horiz = !ship.horiz;
+    const [r, c] = rc(ship.cells[0]);
+    // Erst vorwaerts um das erste Feld. Geht das nicht, weil der Rand im Weg
+    // ist, rueckwaerts um DASSELBE Feld - es bleibt also immer der Angelpunkt.
+    // Vorher gab es nur den Vorwaertsfall: ein Schiff in der untersten Reihe
+    // braeuchte dafuer eine Reihe 11 und konnte deshalb gar nicht drehen.
+    // Bewusst nicht auch noch um das andere Ende: dann haette dieselbe
+    // Schaltflaeche je nach Lage vier moegliche Ergebnisse, und der Spieler
+    // muesste raten, wohin sein Schiff springt.
+    const vor = lineCells(r, c, ship.len, horiz);
+    if (vor) return { cells: vor, horiz };
+    const zurueck = horiz ? lineCells(r, c - ship.len + 1, ship.len, horiz)
+                          : lineCells(r - ship.len + 1, c, ship.len, horiz);
+    return zurueck ? { cells: zurueck, horiz } : null;
+  }
+  const d = { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] }[move];
+  if (!d) return null;
+  const [r0, c0] = rc(ship.cells[0]);
+  const cells = lineCells(r0 + d[0] * schritte, c0 + d[1] * schritte, ship.len, ship.horiz);
+  return cells ? { cells, horiz: ship.horiz } : null;
+}
+
+/** Warum die Zielposition nicht geht. null = sie geht. */
+function placeBlockReason(p, ship, cells) {
+  for (const i of cells) {
+    if (p.incoming.has(i)) return 'Dort wurde bereits hingeschossen.';
+  }
+  const andere = new Set();
+  for (const s of p.ships) if (s !== ship) for (const i of halo(s.cells)) andere.add(i);
+  for (const d of p.decoys) for (const i of halo(d.cells)) andere.add(i);
+  for (const i of cells) {
+    if (andere.has(i)) return 'Zielposition berührt ein anderes Objekt.';
+  }
+  return null;
+}
+
+/** Warum gerade nicht getaucht werden kann. null = es geht. */
+function diveBlockReason(game, slot, o = game.options || DEFAULT_OPTIONS) {
+  const p = game.players[slot];
+  if (!o.diveEnabled) return 'Tauchen ist in dieser Partie deaktiviert.';
+  if (p.divedThisTurn) return 'Bereits getaucht.';
+  if (p.divedLastTurn) return 'Nicht zwei Züge hintereinander tauchen.';
+  const s = sub(p);
+  if (!s || s.hits.length > 0) return 'U-Boot beschädigt oder versenkt.';
+  return null;
+}
+
+/**
+ * Was dieses Schiff gerade darf – fuer die Anzeige im Client.
+ * Der Server rechnet es aus, damit die Regeln an EINER Stelle stehen: sonst
+ * muesste der Client Halo, Beschuss und Reichweite noch einmal nachbauen.
+ */
+export function maneuverOptions(game, slot) {
+  const o = game.options || DEFAULT_OPTIONS;
+  if (!o.maneuverEnabled || game.turn !== slot || game.status !== 'playing') return null;
+  const p = game.players[slot];
+  const tauchbar = !diveBlockReason(game, slot, o) && o.diveMoveRange >= 1;
+
+  const fuer = (ship, weite, dive) => {
+    const steps = {};
+    const area = new Set();
+    for (const move of ['up', 'down', 'left', 'right']) {
+      let max = 0;
+      for (let n = 1; n <= weite; n++) {
+        const z = movedCells(ship, move, n);
+        if (!z || placeBlockReason(p, ship, z.cells)) break;
+        max = n;
+        for (const i of z.cells) area.add(i);
+      }
+      steps[move] = max;
+    }
+    const dreh = movedCells(ship, 'rotate', 1);
+    steps.rotate = dreh && !placeBlockReason(p, ship, dreh.cells) ? 1 : 0;
+    if (steps.rotate) for (const i of dreh.cells) area.add(i);
+    return { range: weite, steps, area: [...area], dive: dive === true };
+  };
+
+  const out = {};
+  for (let i = 0; i < p.ships.length; i++) {
+    const ship = p.ships[i];
+    if (ship.hits.length > 0) continue;
+    out[i] = fuer(ship, shipRange(ship, o));
+    if (tauchbar && ship.type === 'uboot') out[i].diveMove = fuer(ship, o.diveMoveRange, true);
+  }
+  return { ships: out, fake: o.fakeManeuver === true };
 }
 
 export function applyScan(game, slot, center) {

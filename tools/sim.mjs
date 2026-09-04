@@ -107,7 +107,11 @@ function playGame(rand, options) {
     const plan = planTurn(brain, g, slot);
 
     if (plan.maneuver) {
-      const r = applyManeuver(g, slot, plan.maneuver.shipIndex, plan.maneuver.move);
+      // Weite und Tauchfahrt MUESSEN mit: ohne sie fuehrt der Sim einen
+      // anderen Zug aus als der Server und misst einen Regelsatz, den niemand
+      // spielt. Genau daran waren maneuverRange und diveMoveRange wirkungslos.
+      const r = applyManeuver(g, slot, plan.maneuver.shipIndex, plan.maneuver.move,
+        { steps: plan.maneuver.steps, dive: plan.maneuver.dive });
       if (r.ok) { maneuvers[slot]++; noteManeuver(brains[1 - slot]); continue; }
       // Abgeschaltete Manoever fallen hier durch auf die normale Salve.
     }

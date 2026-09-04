@@ -3,7 +3,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs, changedOptions } from '../tools/sim.mjs';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 import { DEFAULT_OPTIONS } from '../server/rules.js';
 
 test('Ohne Argumente: Standardregelsatz, 500 Partien', () => {
@@ -50,4 +55,25 @@ test('Unbekannte und unvollständige Argumente werden abgewiesen', () => {
 test('changedOptions zeigt genau die Abweichungen', () => {
   const c = parseArgs(['--singleShotAfterHit', '--decoyCount=0']);
   assert.deepEqual(changedOptions(c.options).sort(), ['decoyCount=0', 'singleShotAfterHit=true']);
+});
+
+test('Der Simulator führt denselben Zug aus wie der Server', () => {
+  // Beide rufen applyManeuver auf. Fehlten dem Sim die Argumente für Weite und
+  // Tauchfahrt, misste er einen Regelsatz, den niemand spielt: maneuverRange
+  // und diveMoveRange waren dadurch nachweislich wirkungslos, ohne dass ein
+  // Test angeschlagen hätte. Zwei Stellen, ein Ablauf – das muss gekoppelt sein.
+  const sim = readFileSync(path.join(ROOT, 'tools/sim.mjs'), 'utf8');
+  const rooms = readFileSync(path.join(ROOT, 'server/rooms.js'), 'utf8');
+  for (const [name, quelle] of [['sim.mjs', sim], ['rooms.js', rooms]]) {
+    const aufruf = /applyManeuver\(([\s\S]{0,200}?)\);/.exec(quelle);
+    assert.ok(aufruf, `${name}: applyManeuver-Aufruf gefunden`);
+    // Wie die Zusatzangaben heißen, ist egal – rooms.js reicht sie als
+    // `extra` weiter, der Sim baut sie an Ort und Stelle. Geprüft wird, dass
+    // sie überhaupt mitgehen.
+    assert.match(aufruf[1], /steps|extra/,
+      `${name} lässt die Zusatzangaben zum Manöver fallen`);
+  }
+  // Und der Sim baut sie wirklich aus dem Plan des Bots, statt sie zu erfinden.
+  assert.match(sim, /steps: plan\.maneuver\.steps/);
+  assert.match(sim, /dive: plan\.maneuver\.dive/);
 });

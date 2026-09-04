@@ -140,6 +140,42 @@ Nützlich dabei: `display:contents` auf einem Zwischenbehälter gibt dessen Kind
 ab, sodass sie einzeln in Flächen gesetzt werden können — mit `display:block` davor als
 Rückfall, dasselbe Muster wie bei `--cs`.
 
+### Beweglichkeit hilft dem Gesunden — also dem Führenden
+Manöver und Tauchfahrt sind nur mit **unbeschädigten** Schiffen möglich. Wer vorn liegt, hat
+mehr davon. Als der Bot dreimal so oft manövrierte wie vorher, fiel die Comeback-Rate von
+40,3 auf **33,0 %** — unter den Zielkorridor.
+
+**Regel:** Jede Fähigkeit, die intakte Einheiten voraussetzt, ist ein **Anti**-Catch-up, egal
+wie sehr sie sich nach Verteidigung anfühlt. Vor dem Verstärken solcher Mechaniken die
+Comeback-Rate messen, nicht danach.
+
+Dazu die Gegenprobe, die überrascht hat: der naheliegende Catch-up — der Verliererseite mehr
+Schüsse geben (`minSalvo` 2 → 3) — senkt die Comeback-Rate ebenfalls (42 → 38,8 %). Mehr
+Feuerkraft verkürzt die Partie (38,9 → 34,2 Züge), und wer weniger Züge hat, holt weniger auf.
+**Mehr Feuerkraft für beide hilft dem Führenden.**
+
+### Ein Zug, der scheitert, ist ein Zug, der nicht stattfindet
+Der Bot würfelte Manöverrichtungen blind. War die Zielposition belegt, wies die Engine ab, und
+`maybeBotTurn` fiel stillschweigend auf eine normale Salve zurück. Ergebnis: die Heuristik war
+auf ~9 Manöver je Partie eingestellt, herausgekommen sind **3** — und die Tuning-Werte waren
+jahrelang an dieser Fehlerquote kalibriert.
+
+**Regel:** Wer eine Aktion planen lässt, muss ihre Zulässigkeit vorher kennen. Der Server
+rechnet die erlaubten Züge ohnehin für die Anzeige aus (`maneuverOptions`) — dieselbe Quelle
+gehört in den Bot. Und: wenn ein stiller Rückfallpfad existiert, misst man nie, wie oft er
+genommen wird. Der Test dazu prüft die Kopplung direkt: **jeder angebotene Zug muss auch
+angenommen werden.**
+
+### Zwei Stellen, ein Ablauf — eine wird vergessen
+`applyManeuver` wird von `rooms.js` **und** von `tools/sim.mjs` aufgerufen. Neue Argumente kamen
+nur in den Server. Der Simulator führte damit einen anderen Zug aus als das Spiel und meldete
+für zwei neue Einstellungen sauber gemessene, völlig unveränderte Zahlen — die Optionen sahen
+wirkungslos aus, waren es aber nur im Messgerät.
+
+**Regel:** Wenn zwei Aufrufer dieselbe Engine-Funktion benutzen, gehört ein Test dazu, der
+beide nebeneinanderlegt. Eine Messung, die nichts zeigt, ist erst dann ein Ergebnis, wenn das
+Messgerät nachweislich misst.
+
 ### Ein Effekt kommt selten allein — Ereignisstrom statt Streuung
 Die Einblendung war in die Nachrichtenzweige eingestreut. Als der Ton dazukam, hätte er
 dieselben sechs Stellen gebraucht — und die nächste Sache (Notizen, Haptik, Statistik) wieder.

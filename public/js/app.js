@@ -30,7 +30,7 @@ const coord = (i) => { const [r, c] = rc(i); return `${String.fromCharCode(65 + 
 
 let ws = null, myToken = null, myCode = null, mySlot = null, isHost = false;
 let state = null, opts = null, mode = 'normal', selected = new Set();
-let manShip = null, deadline = 0, clockTimer = null;
+let manShip = null, manSteps = 1, manDive = false, deadline = 0, clockTimer = null;
 // Gegen den Bot wird die Partie beim Verlassen geloescht, gegen Menschen
 // wartet der Verbliebene. Der Unterschied kommt aus der 'joined'-Nachricht.
 let vsBot = false;
@@ -315,7 +315,7 @@ function handle(m) {
         }
       }
       if (turnChanged) {
-        mode = 'normal'; selected.clear(); manShip = null;
+        mode = 'normal'; selected.clear(); manShip = null; manSteps = 1; manDive = false;
         $('maneuver-panel').classList.add('hidden');
         // Wird es dein Zug, gehoert das Gegnerbrett nach vorn - man soll nicht
         // suchen muessen, wo geschossen wird.
@@ -417,6 +417,9 @@ function applyOptionsToForm(o) {
   $('o-man').checked = o.maneuverEnabled;
   $('o-pool').checked = o.salvoPool;
   $('o-poolsize').value = o.salvoPoolSize;
+  $('o-manrange').value = o.maneuverRange;
+  $('o-divemove').value = o.diveMoveRange;
+  $('o-fake').checked = o.fakeManeuver;
   $('o-botmin').value = o.botMinSeconds;
   $('o-botmax').value = o.botMaxSeconds;
 }
@@ -437,6 +440,8 @@ $('btn-opts').onclick = () => send({
     scanEnabled: $('o-scan').checked, diveEnabled: $('o-dive').checked,
     maneuverEnabled: $('o-man').checked,
     salvoPool: $('o-pool').checked, salvoPoolSize: +$('o-poolsize').value,
+    maneuverRange: +$('o-manrange').value, diveMoveRange: +$('o-divemove').value,
+    fakeManeuver: $('o-fake').checked,
     botMinSeconds: +$('o-botmin').value, botMaxSeconds: +$('o-botmax').value
   }
 });
@@ -669,7 +674,7 @@ function renderGame() {
     const el = own.children[i];
     if (!el.classList.contains('hit') && !el.classList.contains('sunk')) el.classList.add('miss');
   }
-  if (mode === 'maneuver' && manShip !== null) previewManeuver();
+  if (mode === 'maneuver') { if (manShip !== null) previewManeuver(); renderManeuverPanel(); }
 
   $('foe-name').textContent = state.opponent.name;
   $('foe-ships').textContent = `${state.opponent.shipsLeft} Schiffe`;
@@ -708,7 +713,7 @@ function renderGame() {
     const b = document.createElement('button');
     b.textContent = `${s.label} (${s.len})`;
     if (manShip === s.index) b.classList.add('sel');
-    b.onclick = () => { manShip = s.index; renderGame(); };
+    b.onclick = () => { manShip = s.index; manSteps = 1; manDive = false; renderGame(); };
     box.appendChild(b);
   }
   if (!clockTimer) clockTimer = setInterval(tickClock, 500);
@@ -764,17 +769,66 @@ function tickClock() {
   el.textContent = `${Math.max(0, Math.round((deadline - Date.now()) / 1000))} s`;
 }
 
+/** Was dieses Schiff gerade darf – kommt fertig gerechnet vom Server. */
+function manOpt() {
+  const o = state && state.maneuver && state.maneuver.ships
+    ? state.maneuver.ships[manShip] : null;
+  if (!o) return null;
+  return manDive && o.diveMove ? o.diveMove : o;
+}
+
 function previewManeuver() {
   const s = state.own.ships.find((x) => x.index === manShip);
   if (!s) return;
   const own = $('own-grid');
+  // Erst die erreichbare Flaeche, dann das Schiff darueber: so sieht man auf
+  // einen Blick, wohin es ueberhaupt gehen kann, statt Richtungen zu raten.
+  const o = manOpt();
+  if (o) for (const i of o.area) own.children[i] && own.children[i].classList.add('manarea');
   for (const i of s.cells) own.children[i].classList.add('manship');
+}
+
+/** Schrittweite, Richtungen und Tauchfahrt an die aktuelle Lage anpassen. */
+function renderManeuverPanel() {
+  const o = manOpt();
+  const opts = state ? state.maneuver : null;
+  const eigen = state && state.maneuver && state.maneuver.ships
+    ? state.maneuver.ships[manShip] : null;
+
+  const kannTauchen = !!(eigen && eigen.diveMove);
+  $('man-dive-wrap').classList.toggle('hidden', !kannTauchen);
+  if (!kannTauchen && manDive) manDive = false;
+  $('man-dive').checked = manDive;
+  $('btn-man-hold').classList.toggle('hidden', !(opts && opts.fake));
+
+  const weite = o ? o.range : 1;
+  if (manSteps > weite) manSteps = weite;
+  const reihe = $('man-steps');
+  reihe.innerHTML = '';
+  if (weite > 1) {
+    for (let n = 1; n <= weite; n++) {
+      const b = document.createElement('button');
+      b.textContent = n === 1 ? '1 Feld' : `${n} Felder`;
+      if (n === manSteps) b.classList.add('sel');
+      b.onclick = () => { manSteps = n; renderGame(); };
+      reihe.appendChild(b);
+    }
+  }
+
+  // Richtungen sperren, die mit dieser Weite nicht gehen. Der Server wuerde
+  // sie ohnehin abweisen, und ein Knopf, der nur eine Fehlermeldung erzeugt,
+  // ist schlechter als ein grauer Knopf.
+  for (const b of document.querySelectorAll('#maneuver-panel button[data-move]')) {
+    const mv = b.dataset.move;
+    const max = o ? (o.steps[mv] || 0) : 0;
+    b.disabled = mv === 'rotate' ? max < 1 : max < manSteps;
+  }
 }
 
 function onOwnClick(i) {
   if (mode !== 'maneuver') return;
   const s = state.own.ships.find((x) => x.cells.includes(i) && !x.hits.length && !x.sunk);
-  if (s) { manShip = s.index; renderGame(); }
+  if (s) { manShip = s.index; manSteps = 1; manDive = false; renderGame(); }
 }
 
 function onFoeHover(i) {
@@ -930,7 +984,7 @@ $('btn-maneuver-cancel').onclick = () => { mode = 'normal'; manShip = null; $('m
 for (const b of document.querySelectorAll('#maneuver-panel button[data-move]')) {
   b.onclick = () => {
     if (manShip === null) { $('game-error').textContent = 'Erst ein Schiff wählen.'; return; }
-    send({ t: 'maneuver', shipIndex: manShip, move: b.dataset.move });
+    send({ t: 'maneuver', shipIndex: manShip, move: b.dataset.move, steps: manSteps, dive: manDive });
     mode = 'normal'; manShip = null;
     $('maneuver-panel').classList.add('hidden');
     selected.clear();
@@ -1086,3 +1140,16 @@ function closeGone() {
 
 $('gone-wait').onclick = () => goneDialog.close();
 $('gone-leave').onclick = () => { closeGone(); send({ t: 'leaveGame' }); };
+
+// Tauchfahrt umschalten: sie hat eine eigene Reichweite, also muss die
+// erreichbare Fläche neu gezeichnet werden.
+$('man-dive').onchange = () => { manDive = $('man-dive').checked; manSteps = 1; renderGame(); };
+
+// Scheinmanöver: kostet den Zug, bewegt nichts, meldet dasselbe. Ein Manöver
+// ist ein Befehl, keine Ortsveränderung – deshalb lügt das Orakel nicht.
+$('btn-man-hold').onclick = () => {
+  send({ t: 'maneuver', shipIndex: manShip == null ? 0 : manShip, move: 'hold' });
+  mode = 'normal'; manShip = null; manSteps = 1; manDive = false;
+  $('maneuver-panel').classList.add('hidden');
+  selected.clear();
+};

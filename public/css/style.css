@@ -460,3 +460,8 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
   .conn:not(.down){display:none}
   .conn.down{color:var(--hit)}
 }
+
+/* Erreichbare Felder im Manövermodus. Bewusst nur eine Tönung, kein Rahmen:
+   das Schiff selbst wird darüber markiert und soll sichtbar bleiben. */
+.cell.manarea{background:#25506a}
+#man-steps button.sel{border-color:var(--accent);background:#1b3a4e}

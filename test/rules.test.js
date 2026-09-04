@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ix, validatePlacement, makePlayer, createGame, beginTurn,
   applySalvo, applyManeuver, applyDive, applyScan, requiredShots,
-  baseSalvo, randomPlacement, aliveShips, allSunk, FLEET_SPEC, summarize, UNKNOWN
+  baseSalvo, randomPlacement, aliveShips, allSunk, FLEET_SPEC, summarize, UNKNOWN, maneuverOptions
 } from '../server/rules.js';
 
 // Deterministische Aufstellung: alles in Spalten mit Abstand
@@ -486,4 +486,166 @@ test('Bilanz: ein Treffer auf dem alten Feld ist keine Rettung', () => {
 
   const m = summarize(g, 0).find((e) => e.key === 'maneuver');
   assert.equal(m.saved, 0, 'ein Treffer auf dem alten Feld rettet nichts');
+});
+
+// ------------------------------------------------- Manöver: Reichweite & Co.
+/** Aufstellung mit einem Zerstoerer waagerecht in der UNTERSTEN Reihe. */
+const AM_RAND = {
+  ships: [
+    { type: 'traeger',        r: 0, c: 0, horiz: false },
+    { type: 'schlachtschiff', r: 0, c: 2, horiz: false },
+    { type: 'kreuzer',        r: 0, c: 4, horiz: false },
+    { type: 'uboot',          r: 0, c: 6, horiz: false },
+    { type: 'zerstoerer',     r: 9, c: 0, horiz: true }    // 10A, 10B
+  ],
+  decoys: [{ r: 6, c: 0, horiz: true }, { r: 6, c: 4, horiz: true }]
+};
+
+test('Drehen klappt auch am Rand – notfalls um das andere Ende', () => {
+  // Vorher wurde immer um das ERSTE Feld gedreht. Ein Schiff in der untersten
+  // Reihe braeuchte dafuer eine Reihe 11 - also hiess es "geht nicht", was am
+  // Rand keinen Sinn ergibt: man dreht eben in die andere Richtung.
+  const g = createGame(makePlayer('A', AM_RAND), makePlayer('B', AM_RAND), { starter: 0 });
+  beginTurn(g);
+  const i = g.players[0].ships.findIndex((s) => s.type === 'zerstoerer');
+  assert.deepEqual(g.players[0].ships[i].cells, [ix(9, 0), ix(9, 1)], 'Selbsttest: liegt am Rand');
+
+  assert.equal(applyManeuver(g, 0, i, 'rotate').ok, true, 'Drehen geht');
+  const neu = g.players[0].ships[i].cells;
+  assert.equal(g.players[0].ships[i].horiz, false, 'steht jetzt senkrecht');
+  assert.ok(neu.every((c) => c < 100), 'und vollständig im Raster');
+  assert.ok(neu.includes(ix(9, 0)), 'ein Feld der alten Lage bleibt der Angelpunkt');
+});
+
+test('Reichweite hängt an der Schiffsgröße', () => {
+  const g = mk();
+  const zer = g.players[0].ships.findIndex((s) => s.type === 'zerstoerer');   // 2 Felder
+  const trg = g.players[0].ships.findIndex((s) => s.type === 'traeger');      // 5 Felder
+
+  assert.equal(applyManeuver(g, 0, zer, 'down', { steps: 2 }).ok, true, 'Kleines Schiff: 2 Felder');
+  g.turn = 0;
+  const r = applyManeuver(g, 0, trg, 'down', { steps: 2 });
+  assert.equal(r.ok, true, 'Träger darf ziehen …');
+  // … aber nur ein Feld weit: die Schrittzahl wird auf die Reichweite geklammert.
+  const log = g.log.filter((e) => e.kind === 'maneuver');
+  assert.equal(log[log.length - 1].steps, 1, 'Träger bleibt bei einem Feld');
+});
+
+test('maneuverRange 1 stellt das alte Verhalten wieder her', () => {
+  const opts = mergeOptions({ maneuverRange: 1 });
+  const g = createGame(makePlayer('A', FIXED, { options: opts }),
+    makePlayer('B', FIXED, { options: opts }), { starter: 0, options: opts });
+  beginTurn(g);
+  const zer = g.players[0].ships.findIndex((s) => s.type === 'zerstoerer');
+  const vorher = g.players[0].ships[zer].cells.slice();
+  applyManeuver(g, 0, zer, 'down', { steps: 2 });
+  const nachher = g.players[0].ships[zer].cells;
+  assert.equal(nachher[0] - vorher[0], 10, 'genau eine Reihe, nicht zwei');
+});
+
+test('Scheinmanöver: Befehl ohne Bewegung, gleiche Meldung', () => {
+  const g = mk();
+  const vorher = g.players[0].ships.map((s) => s.cells.join(','));
+  const r = applyManeuver(g, 0, 0, 'hold');
+  assert.equal(r.ok, true);
+  assert.equal(r.notice, 'maneuvered', 'der Gegner hört dasselbe wie bei einem echten Manöver');
+  assert.deepEqual(g.players[0].ships.map((s) => s.cells.join(',')), vorher, 'nichts bewegt');
+  assert.equal(g.turn, 1, 'der Zug ist trotzdem weg');
+
+  const e = g.log.filter((x) => x.kind === 'maneuver').pop();
+  assert.equal(e.fake, true, 'im Protokoll als Scheinmanöver erkennbar');
+  assert.deepEqual(e.from, [], 'ohne alte Position – es kann nie als Rettung zählen');
+});
+
+test('Scheinmanöver lässt sich abschalten', () => {
+  const opts = mergeOptions({ fakeManeuver: false });
+  const g = createGame(makePlayer('A', FIXED, { options: opts }),
+    makePlayer('B', FIXED, { options: opts }), { starter: 0, options: opts });
+  beginTurn(g);
+  const r = applyManeuver(g, 0, 0, 'hold');
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Scheinmanöver/);
+});
+
+test('Tauchfahrt: verlegt weiter UND taucht, kostet den ganzen Zug', () => {
+  const g = mk();
+  const ub = g.players[0].ships.findIndex((s) => s.type === 'uboot');
+  const vorher = g.players[0].ships[ub].cells[0];
+
+  const r = applyManeuver(g, 0, ub, 'down', { steps: 3, dive: true });
+  assert.equal(r.ok, true, 'Tauchfahrt geht');
+  assert.equal(g.players[0].ships[ub].cells[0] - vorher, 30, 'drei Reihen weit');
+  assert.equal(g.players[0].diving, true, 'und getaucht');
+  assert.equal(g.turn, 1, 'der Zug ist weg');
+  assert.equal(r.notice, 'maneuvered', 'der Gegner hört nur „manövriert“');
+
+  // Der Beweis, dass es wirkt: der Gegner trifft ins Wasser statt aufs Boot.
+  const treffer = salve(g, 1, [g.players[0].ships[ub].cells[0]]);
+  assert.equal(treffer.evaded, true, 'ausgewichen');
+});
+
+test('Tauchfahrt nur mit dem U-Boot und nur wenn erlaubt', () => {
+  const g = mk();
+  const zer = g.players[0].ships.findIndex((s) => s.type === 'zerstoerer');
+  assert.match(applyManeuver(g, 0, zer, 'down', { dive: true }).error, /Nur das U-Boot/);
+
+  const opts = mergeOptions({ diveMoveRange: 0 });
+  const g2 = createGame(makePlayer('A', FIXED, { options: opts }),
+    makePlayer('B', FIXED, { options: opts }), { starter: 0, options: opts });
+  beginTurn(g2);
+  const ub = g2.players[0].ships.findIndex((s) => s.type === 'uboot');
+  assert.match(applyManeuver(g2, 0, ub, 'down', { dive: true }).error, /Tauchfahrt/);
+});
+
+test('maneuverOptions sagt dem Client, was gerade geht', () => {
+  const g = mk();
+  const o = maneuverOptions(g, 0);
+  assert.ok(o && o.ships, 'Angaben vorhanden');
+  assert.equal(o.fake, true, 'Scheinmanöver erlaubt');
+
+  const zer = g.players[0].ships.findIndex((s) => s.type === 'zerstoerer');
+  assert.equal(o.ships[zer].range, 2, 'kleines Schiff trägt zwei Felder');
+  assert.ok(o.ships[zer].steps.down >= 1, 'nach unten ist Platz');
+  assert.ok(o.ships[zer].area.length > 0, 'und es gibt eine Fläche zum Anzeigen');
+
+  const ub = g.players[0].ships.findIndex((s) => s.type === 'uboot');
+  assert.ok(o.ships[ub].diveMove, 'für das U-Boot steht die Tauchfahrt bereit');
+  assert.equal(o.ships[ub].diveMove.range, 3, 'mit ihrer eigenen Reichweite');
+
+  // Beschaedigte Schiffe sind fixiert - sie tauchen gar nicht erst auf.
+  g.players[0].ships[zer].hits.push(g.players[0].ships[zer].cells[0]);
+  assert.equal(maneuverOptions(g, 0).ships[zer], undefined, 'beschädigt = keine Angaben');
+});
+
+test('Was maneuverOptions anbietet, nimmt applyManeuver auch an', () => {
+  // Der Bot hat lange blind Richtungen gewuerfelt; scheiterte die Bewegung,
+  // fiel er stillschweigend auf eine Salve zurueck - er manoevrierte in
+  // Wahrheit dreimal seltener als gedacht, und niemand merkte es. Seitdem
+  // waehlt er aus diesen Angaben. Also muessen sie stimmen: JEDER angebotene
+  // Zug muss durchgehen, sonst ist der Bot wieder heimlich untaetig.
+  for (const range of [1, 2, 3]) {
+    const opts = mergeOptions({ maneuverRange: range });
+    const g = createGame(makePlayer('A', FIXED, { options: opts }),
+      makePlayer('B', FIXED, { options: opts }), { starter: 0, options: opts });
+    beginTurn(g);
+    const angebot = maneuverOptions(g, 0);
+
+    for (const [idx, o] of Object.entries(angebot.ships)) {
+      for (const q of [o, o.diveMove].filter(Boolean)) {
+        for (const [move, max] of Object.entries(q.steps)) {
+          for (let n = 1; n <= max; n++) {
+            // Jeder Versuch braucht eine frische Partie: ein Manöver beendet
+            // den Zug, danach wäre alles Weitere ohnehin abgelehnt.
+            const g2 = createGame(makePlayer('A', FIXED, { options: opts }),
+              makePlayer('B', FIXED, { options: opts }), { starter: 0, options: opts });
+            beginTurn(g2);
+            const r = applyManeuver(g2, 0, Number(idx), move,
+              { steps: move === 'rotate' ? 1 : n, dive: q.dive === true });
+            assert.equal(r.ok, true,
+              `Weite ${range}: Schiff ${idx} ${move} ${n} wurde angeboten, aber abgelehnt: ${r.error}`);
+          }
+        }
+      }
+    }
+  }
 });

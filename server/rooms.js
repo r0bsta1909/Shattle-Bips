@@ -3,7 +3,7 @@
 import {
   makePlayer, createGame, randomPlacement, validatePlacement, mergeOptions, DEFAULT_OPTIONS,
   applySalvo, applyManeuver, applyDive, applyScan, passTurn, beginTurn,
-  requiredShots, shotsAvailable, baseSalvo, ownView, aliveShips, shipAlive, summarize
+  requiredShots, shotsAvailable, baseSalvo, ownView, aliveShips, shipAlive, summarize, maneuverOptions
 } from './rules.js';
 import {
   createBotBrain, botPlacement, planTurn, planShots,
@@ -279,6 +279,10 @@ export function pushState(room) {
       baseSalvo: baseSalvo(g, i),
       // Bei laufendem Vorrat ist "shots" die Obergrenze, nicht die Pflicht -
       // der Spieler waehlt zwischen Einzelschuss und Salve.
+      // Was gerade manoevriert werden darf, rechnet der Server: sonst muesste
+      // der Client Halo, Beschuss und Reichweite noch einmal nachbauen - eine
+      // zweite Fassung der Regeln, die auseinanderlaufen kann.
+      maneuver: maneuverOptions(g, i),
       salvoPool: (g.options || {}).salvoPool === true,
       salvosLeft: me.salvosLeft,
       // Die Optionsflags fehlten hier: bei abgeschalteter Aufklärung blieb der
@@ -454,8 +458,8 @@ export function doSalvo(room, slot, shots) {
   return res;
 }
 
-export function doManeuver(room, slot, shipIndex, move) {
-  const res = applyManeuver(room.game, slot, shipIndex, move);
+export function doManeuver(room, slot, shipIndex, move, extra) {
+  const res = applyManeuver(room.game, slot, shipIndex, move, extra);
   if (!res.ok) return res;
   room.timeoutStreak[slot] = 0;
   const foe = room.slots[1 - slot];
@@ -492,7 +496,8 @@ function maybeBotTurn(room) {
     const plan = planTurn(room.brain, g, slot);
 
     if (plan.maneuver) {
-      const r = doManeuver(room, slot, plan.maneuver.shipIndex, plan.maneuver.move);
+      const r = doManeuver(room, slot, plan.maneuver.shipIndex, plan.maneuver.move,
+        { steps: plan.maneuver.steps, dive: plan.maneuver.dive });
       if (r.ok) return;
     }
     if (plan.dive) applyDive(g, slot);

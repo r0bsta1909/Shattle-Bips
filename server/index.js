@@ -240,7 +240,8 @@ wss.on('connection', (ws) => {
 
         case 'maneuver': {
           if (!ctx.room?.game) return fail(ws, 'Keine Partie.');
-          const r = doManeuver(ctx.room, ctx.slot, m.shipIndex, m.move);
+          const r = doManeuver(ctx.room, ctx.slot, m.shipIndex, m.move,
+            { steps: m.steps, dive: m.dive === true });
           if (!r.ok) return fail(ws, r.error);
           return;
         }
