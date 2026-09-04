@@ -536,6 +536,9 @@ function renderGame() {
 
   $('foe-name').textContent = state.opponent.name;
   $('foe-ships').textContent = `${state.opponent.shipsLeft} Schiffe`;
+  // Eigene Restflotte genauso zeigen wie die gegnerische - man soll nicht
+  // die Uebersicht durchzaehlen muessen, um zu wissen, wie man dasteht.
+  $('own-ships').textContent = `${state.own.ships.filter((s) => !s.sunk).length} Schiffe`;
   const mine = state.turn === state.you;
   // In #turn-banner darf kein textContent geschrieben werden: er enthaelt
   // #turn-text, #salvo-count, #clock und #mode-pill. Ein Schreibzugriff auf den

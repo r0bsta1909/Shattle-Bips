@@ -7,6 +7,40 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-04 (Fortsetzung) · Kommandozentrale, zentrierte Titel — und ein Renderer
+
+**Das Wichtigste zuerst: `tools/shot.mjs`.** Chrome headless rendert das echte Markup mit dem
+echten CSS als Bild — ohne Server, ohne Partie, ohne Zusatzpaket. Damit ist Layout in diesem
+Projekt **nicht mehr Schätzsache**. In dieser Runde hat es in einem Durchgang geklärt, was
+drei Runden Nachrechnen nicht geklärt hatten.
+
+**Geändert**
+- **Kommandozentrale** heißt jetzt so und hat einen Titel wie der Funkverkehr daneben
+  (hochkant ausgeblendet — dort kostet jede Zeile Höhe).
+- **Mittelspalte als ein Rasterfeld** (`.mid`) statt zwei Reihen. Sie teilt sich innen selbst
+  auf: Kommandozentrale nimmt den freien Platz, Funkverkehr behält seine Größe. Hochkant löst
+  sich `.mid` per `display:contents` wieder auf, deshalb steht der Funk im Markup **vor** der
+  Bedienung und `order` dreht das am PC um.
+- **Titel mittig** über Brettern und Karten. **„Deine Flotte" zeigt jetzt auch ihre
+  Restschiffe**, wie der Gegner. **Legende** je Flotte zentriert, die Aufstellungsregel steht
+  nur noch einmal — bei der gegnerischen.
+
+**Gelernt**
+- Ein Raster verteilt den Höhenüberschuss eines über mehrere Reihen spannenden Elements auf
+  **alle** gespannten Reihen mit intrinsischer Größe. `auto`, `min-content`,
+  `minmax(0,min-content)` — keines verhindert das. Entweder klafft eine Lücke oder etwas
+  rutscht heraus. Zwei Karten neben einem hohen Element gehören in **ein** Feld mit eigener
+  Aufteilung.
+- Zum dritten Mal fielen eigene Tests, weil sie das **Mittel** prüften statt der Regel
+  (`grid-template-rows:min-content auto`, `grid-area:log`). Beim Umbau war nichts kaputt,
+  nur anders gelöst.
+- **Mobil ist beweisbar unberührt:** dieselbe Ansicht vor und nach dem Umbau hochkant
+  gerendert und verglichen — Pixel für Pixel identisch.
+
+**Offen**
+- Issue #25: Bot-Partie läuft nach Neuladen im Hintergrund weiter; „Zurück zur Lobby"-Knopf;
+  Reconnect-Fenster für Menschen-Partien.
+
 ## 2026-09-04 (Fortsetzung) · Mittelspalte ohne Lücke, Bot-Bedenkzeit
 
 **Geändert**

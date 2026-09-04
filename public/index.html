@@ -130,19 +130,31 @@
 
   <div class="game-pane" id="pane-own">
     <div class="board-col">
-      <h3>Deine Flotte</h3>
+      <h3>Deine Flotte <span id="own-ships" class="pill"></span></h3>
       <div id="own-grid" class="grid own"></div>
     </div>
     <div class="info card">
       <div class="fleet-cols">
-        <div><h4>Gegner</h4><ul id="fleet-foe" class="fleet-list"></ul></div>
+        <div>
+          <h4>Gegner</h4><ul id="fleet-foe" class="fleet-list"></ul>
+          <!-- Die Aufstellungsregel steht nur einmal, bei der gegnerischen
+               Flotte. Zweimal derselbe Satz sagt nichts Zusaetzliches. -->
+          <p class="hint">Aufstellung: nichts berührt sich, auch nicht diagonal &ndash; ein Feld Abstand rundum.
+            Köder sind so lang wie der Zerstörer und werden nie versenkt.</p>
+        </div>
         <div><h4>Deine Flotte</h4><ul id="fleet-own" class="fleet-list"></ul></div>
       </div>
-      <p class="hint">Aufstellung: nichts berührt sich, auch nicht diagonal &ndash; ein Feld Abstand rundum.
-        Köder sind so lang wie der Zerstörer und werden nie versenkt.</p>
     </div>
   </div>
 
+  <!-- Mittelspalte am PC: Kommandozentrale oben, Funkverkehr darunter.
+       Als EIN Element, weil das Raster den Hoehenueberschuss der Bretter sonst
+       auf beide Reihen verteilt und dazwischen eine Luecke laesst.
+       Hochkant loest sich der Behaelter per display:contents wieder auf - dann
+       sind beide direkte Kinder des Rasters wie zuvor. Deshalb steht der Funk
+       im Markup VOR der Bedienung: hochkant zaehlt diese Reihenfolge, am PC
+       dreht `order` sie um. -->
+  <div class="mid">
   <div class="game-pane" id="pane-log">
     <div class="card log-card">
       <h3>Funkverkehr</h3>
@@ -153,6 +165,9 @@
   <!-- Steht ausserhalb der Bereiche und ist damit immer sichtbar, egal was
        der Umschalter zeigt. -->
   <div class="controls card">
+    <!-- Der Funkverkehr hat einen Titel, die Bedienung verdient denselben.
+         Hochkant ist sie ausgeblendet: dort zaehlt jede Zeile Hoehe. -->
+    <h3>Kommandozentrale</h3>
     <div id="turn-banner" class="banner">
       <span id="turn-text">…</span>
       <span class="banner-stats">
@@ -182,6 +197,7 @@
     </div>
     <p id="game-error" class="error"></p>
   </div>
+  </div><!-- .mid -->
 </section>
 
 <!-- -------------------------------------------------------- Ende -->

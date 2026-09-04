@@ -140,6 +140,23 @@ Nützlich dabei: `display:contents` auf einem Zwischenbehälter gibt dessen Kind
 ab, sodass sie einzeln in Flächen gesetzt werden können — mit `display:block` davor als
 Rückfall, dasselbe Muster wie bei `--cs`.
 
+### Layout ist doch prüfbar — Chrome ist schon da
+Hier stand lange „Layout-Geometrie ist statisch nicht prüfbar, der Beweis ist das Gerät".
+Das stimmt für *Tests*, war aber die falsche Schlussfolgerung für die *Arbeit*: jede Runde
+wurde geschätzt, und der Nutzer musste am Bildschirm korrigieren. Chrome liegt auf jedem
+Entwicklungsrechner. `node tools/shot.mjs 1440x900` rendert das **echte** Markup mit dem
+**echten** CSS und legt ein Bild hin — ohne Server, ohne Partie, ohne Zusatzpaket.
+
+Damit ließ sich in einer Runde durchprobieren, was drei Runden Rechnen nicht geklärt hatten:
+dass ein Raster den Höhenüberschuss eines über mehrere Reihen spannenden Elements auf **alle**
+gespannten Reihen mit intrinsischer Größe verteilt. Weder `auto` noch `min-content` noch
+`minmax(0,min-content)` verhindern das — entweder klafft eine Lücke oder etwas rutscht heraus.
+**Regel:** Sitzen zwei Karten in einer Spalte neben einem hohen Element, gehören sie in **ein**
+Rasterfeld, das sich innen selbst aufteilt (Flexbox), nicht in zwei Rasterreihen.
+
+Und der Gegenbeweis ist genauso billig: dieselbe Ansicht vor und nach dem Umbau hochkant
+rendern und die Dateien vergleichen. `cmp` sagt dann Pixel für Pixel, ob Mobil unberührt blieb.
+
 ### Laufzeit ist ein Prüfergebnis
 `npm run e2e` brauchte mal 24, mal 61 Sekunden und bestand jedes Mal. Ursache: der Testklient
 würfelte Scan-Mittelpunkte als `11 + rand*77` und traf damit auch Randfelder. Der Server wies

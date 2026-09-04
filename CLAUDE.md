@@ -37,6 +37,7 @@ liest dort, *warum* es passiert ist.
 | `server/bot.js` | Probability-Density-Zielwahl, Ködererkennung, Gegnermodell |
 | `public/` | Client ohne Build-Schritt: `index.html`, `js/app.js`, `css/style.css` |
 | `tools/sim.mjs` | Headless-Balancing auf derselben Engine, mit denselben Optionen |
+| `tools/shot.mjs` | Bildschirmfoto der Spielansicht ueber Chrome headless - macht Layout pruefbar |
 | `test/` | siehe unten |
 
 **Der Server ist autoritativ.** Der Client bekommt nie die gegnerische Flotte — nur sein Brett,
@@ -54,6 +55,8 @@ npm run e2e:lobby         # zwei Clients
 npm run e2e:options       # Optionen, Zug-Timeout, Revanche
 npm run e2e:feedback      # /version und /api/feedback über echtes HTTP
 node tools/sim.mjs 800 --singleShotAfterHit    # Balancing mit Lobby-Optionen
+node tools/shot.mjs 1440x900                   # Layout ansehen, ohne zu spielen
+node tools/shot.mjs 393x852                    # dasselbe hochkant
 ```
 
 **Vor jedem Push:** `npm test` **und** alle vier e2e-Suiten. Sie sind schnell und haben in

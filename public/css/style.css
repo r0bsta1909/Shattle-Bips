@@ -106,6 +106,9 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 .cell.preview{background:#2c5b73}
 .cell.bad{background:#5c2a24}
 
+/* Hochkant loest sich die Mittelspalte auf: Funk und Bedienung sind dann
+   wieder direkte Kinder des Rasters, genau wie vor ihrer Zusammenfassung. */
+.mid{display:contents}
 .board-col{margin-bottom:12px}
 .place-wrap{display:flex;flex-direction:column;gap:14px}
 .ship-list{list-style:none;padding:0;margin:0;display:grid;
@@ -240,6 +243,9 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
   .game-pane{overflow:auto;min-height:0}     /* nur der Inhalt scrollt, nie das Brett */
   .game-pane:not(.active){display:none}
   .controls{margin-bottom:0}
+  /* Hochkant zaehlt jede Zeile: die feste Ansicht ist genau schirmhoch, ein
+     zusaetzlicher Titel wuerde unten Platz kosten. Am PC steht er. */
+  .controls > h3{display:none}
   .row.actions button{font-size:13px;padding:11px 2px}
   main{padding-bottom:0}
 }
@@ -285,30 +291,39 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
        ist ohnehin Platz, und er reisst nicht mehr nach rechts aus. Als
        vierte Reihe quer unter der Legende haette er 265px Hoehe gekostet und
        die Kacheln von 52 auf 34px gedrueckt. */
+    /* Nur noch zwei Reihen: die Mittelspalte ist EIN Rasterfeld und teilt sich
+       innen selbst auf. Vorher standen Bedienung und Funk in zwei Reihen, ueber
+       die die Bretter spannten - und das Raster verteilt den Ueberschuss eines
+       spannenden Elements auf alle gespannten Reihen mit intrinsischer Groesse.
+       Egal ob `auto`, `min-content` oder `minmax(0,min-content)`: entweder
+       klaffte eine Luecke zwischen den Karten oder der Funk rutschte unter die
+       Bretter. Mit einem einzigen Feld entfaellt die Frage. */
     grid-template-areas:
       "foe  ctrl own"
-      "foe  log  own"
       "info info info";
-
-    /* Reihe 1 ist genau so hoch wie das Kommandofeld, Reihe 2 nimmt auf, was
-       die hohen Bretter daneben uebrig lassen. Ohne diese Angabe sind beide
-       Reihen `auto`, und das Raster verteilt den Ueberschuss gleichmaessig:
-       dann klafft eine Luecke zwischen Kommandofeld und Funkverkehr, und
-       unter dem Funk bleibt nochmal Rest stehen - es sah aus, als schwebten
-       zwei Karten in der Mitte.
-       `min-content` waechst nicht ueber den Inhalt hinaus, `auto` schon -
-       deshalb landet der ganze Ueberschuss in Reihe 2. */
-    grid-template-rows:min-content auto auto;
   }
   #pane-foe > .board-col{grid-area:foe}
   #pane-own > .board-col{grid-area:own}
   #pane-own > .info     {grid-area:info}
-  #pane-log > .log-card {grid-area:log}
 
-  /* Der Funk fuellt, was das Kommandofeld uebrig laesst, statt eine feste
-     Hoehe zu haben. Damit endet die Mittelspalte genau mit den Brettern. */
-  #pane-log > .log-card{align-self:stretch;display:flex;flex-direction:column;min-height:0}
-  #pane-log > .log-card .log{max-height:none;flex:1 1 0;min-height:120px}
+  /* Die Mittelspalte teilt sich selbst auf: Kommandozentrale oben, sie nimmt
+     den ganzen Rest (flex:1); Funkverkehr unten in seiner eigenen Groesse.
+     `order` dreht die Markup-Reihenfolge um, die hochkant gebraucht wird. */
+  .mid{grid-area:ctrl;align-self:stretch;
+       display:flex;flex-direction:column;gap:18px;min-height:0}
+  .mid > .controls{order:0;flex:1 1 auto}
+  .mid > #pane-log > .log-card{order:1;flex:0 0 auto}
+
+  /* Titel mittig ueber dem, was sie beschriften - Bretter wie Karten. */
+  #pane-foe > .board-col > h3,
+  #pane-own > .board-col > h3,
+  #pane-log > .log-card > h3,
+  .mid > .controls > h3{text-align:center}
+
+  /* Legende: jede Flotte fuer sich zentriert, damit die beiden Haelften
+     dieselbe Achse haben wie die Bretter darueber. */
+  .fleet-cols > div{text-align:center}
+  .fleet-list{justify-content:center}
 
   /* Manoevermodus: das Kommandofeld verdoppelt seine Hoehe (Schiffswahl plus
      fuenf Richtungsknoepfe) und draengte den Funk zusammen. Jetzt weicht der
@@ -317,12 +332,6 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
      also braucht es dafuer kein zusaetzliches Feld im Client.
      Browser ohne :has() verwerfen die Regel und zeigen weiter beides. */
   .screen#screen-game.active:has(#maneuver-panel:not(.hidden)) #pane-log > .log-card{display:none}
-  /* Und es nimmt beide Reihen ein. Ohne das waere die Mittelspalte im
-     Manoevermodus wieder kuerzer als die Bretter - genau der schwebende
-     Eindruck, den die Reihenangabe oben gerade beseitigt hat. */
-  .screen#screen-game.active:has(#maneuver-panel:not(.hidden)) > .controls{
-    grid-row:1 / 3; align-self:stretch;
-  }
   .screen#screen-game.active > .controls{grid-area:ctrl}
   .screen#screen-game.active .board-col,
   .screen#screen-game.active .card{margin-bottom:0}   /* das macht jetzt gap */

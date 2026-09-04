@@ -225,9 +225,10 @@ test('Am PC stehen beide Bretter nebeneinander', () => {
   assert.equal(rows[0].indexOf('foe'), 0, 'Gegnerbrett links');
   assert.equal(rows[0].indexOf('own'), 2, 'eigenes Brett rechts');
 
-  // Nichts sitzt am aeusseren Rand: der Funk liegt in der Mittelspalte, die
-  // Flottenuebersicht quer darunter. Damit ist alles zentriert ausgerichtet.
-  assert.ok(rows.some((r) => r[1] === 'log'), 'der Funkverkehr sitzt in der Mitte');
+  // Nichts sitzt am aeusseren Rand: Kommandozentrale UND Funk teilen sich die
+  // Mittelspalte, die Flottenuebersicht liegt quer darunter.
+  assert.match(desktopCss, /\.mid\{[^}]*grid-area:ctrl/,
+    'die Mittelspalte ist ein Feld – Bedienung und Funk stecken darin');
   const letzte = rows[rows.length - 1];
   assert.ok(letzte.every((a) => a === letzte[0]),
     'die unterste Reihe geht über die volle Breite');
@@ -239,7 +240,7 @@ test('Am PC stehen beide Bretter nebeneinander', () => {
   assert.match(desktopCss, /\.game-pane\{display:block ?!important/,
     'display:block bleibt als Rückfall für Browser ohne display:contents');
 
-  for (const area of ['foe', 'own', 'info', 'log', 'ctrl']) {
+  for (const area of ['foe', 'own', 'info', 'ctrl']) {
     // Zeichenklasse statt \b: ein Escape in einem Template-Literal wird vom
     // JS-Parser gelesen, bevor die RegExp ihn sieht - "\b" ist dort ein
     // Rueckschritt-Zeichen, keine Wortgrenze.
@@ -314,15 +315,29 @@ test('Jede Lobby-Option ist im Formular einstellbar und wird gesendet', () => {
 
 // ------------------------------------------------ Mittelspalte am PC
 test('Mittelspalte: Kommandofeld und Funk füllen sie ohne Lücke', () => {
-  // Ohne Reihenangabe sind beide Reihen `auto`, und das Raster verteilt den
-  // Ueberschuss der hohen Bretter gleichmaessig: eine Luecke zwischen den
-  // beiden Karten, darunter nochmal Rest. Es sah aus, als schwebten sie.
-  assert.match(desktopCss, /grid-template-rows:min-content auto/,
-    'Reihe 1 wächst nicht über das Kommandofeld hinaus');
-  assert.match(desktopCss, /#pane-log > \.log-card\{[^}]*align-self:stretch/,
-    'der Funkverkehr füllt, was übrig bleibt');
-  assert.match(desktopCss, /#pane-log > \.log-card \.log\{[^}]*max-height:none/,
-    'und hat dafür keine feste Höhe mehr');
+  // Standen Bedienung und Funk in zwei RASTERREIHEN, ueber die die Bretter
+  // spannen, verteilte das Raster deren Hoehenueberschuss auf beide Reihen:
+  // je nach Reihenangabe klaffte eine Luecke dazwischen oder der Funk rutschte
+  // unter die Bretter. Als EIN Feld mit eigener Aufteilung entfaellt das.
+  assert.match(desktopCss, /\.mid\{[^}]*align-self:stretch/,
+    'die Mittelspalte ist so hoch wie die Bretter');
+  assert.match(desktopCss, /\.mid\{[^}]*flex-direction:column/,
+    'und teilt sich innen selbst auf');
+  assert.match(desktopCss, /\.mid > \.controls\{[^}]*flex:1 /,
+    'die Kommandozentrale nimmt den freien Platz');
+  assert.match(desktopCss, /\.mid > #pane-log > \.log-card\{[^}]*flex:0 /,
+    'der Funkverkehr behält seine Größe');
+
+  // Hochkant MUSS sich der Behaelter aufloesen, sonst haengen Funk und
+  // Bedienung in einem Kasten statt als eigene Rasterkinder - die feste
+  // Ansicht (Umschalter oben, Leiste unten) waere damit zerstoert.
+  assert.match(cssCode, /(^|\n)\.mid\{display:contents\}/,
+    'hochkant löst sich die Mittelspalte wieder auf');
+  // Und deshalb steht der Funk im Markup VOR der Bedienung: hochkant zaehlt
+  // diese Reihenfolge, am PC dreht `order` sie um.
+  assert.ok(html.indexOf('id="pane-log"') < html.indexOf('class="controls card"'),
+    'Funkverkehr steht im Markup vor der Bedienung');
+  assert.match(desktopCss, /\.mid > \.controls\{[^}]*order:0/, 'am PC steht sie oben');
 });
 
 test('Manövermodus gibt dem Kommandofeld die Mittelspalte', () => {
@@ -333,10 +348,41 @@ test('Manövermodus gibt dem Kommandofeld die Mittelspalte', () => {
   // Die Regel haengt am Zustand im Markup - ohne die Klasse greift sie nie.
   assert.match(html, /id="maneuver-panel"[^>]*class="[^"]*hidden/,
     'der Modus steht als Klasse im Markup');
-  // Sonst waere die Mittelspalte im Manoevermodus wieder kuerzer als die
-  // Bretter - genau der schwebende Eindruck, den die Reihenangabe beseitigt.
-  assert.ok(/:has\(#maneuver-panel:not\(\.hidden\)\) > \.controls\{[^}]*grid-row:1 \/ 3/.test(desktopCss),
-    'und das Kommandofeld füllt beide Reihen');
   assert.match(app, /\$\('maneuver-panel'\)\.classList\.toggle\('hidden'/,
     'und der Client schaltet genau diese Klasse');
+});
+
+test('Titel stehen mittig über dem, was sie beschriften', () => {
+  // Die Kommandozentrale hatte als einziger Bereich keinen Titel, obwohl der
+  // Funkverkehr daneben einen hat.
+  assert.match(html, /<h3>Kommandozentrale<\/h3>/, 'die Bedienung hat einen Namen');
+  // Hochkant kostet ein zusaetzlicher Titel Hoehe, die die feste Ansicht nicht
+  // hat - dort bleibt er aus.
+  const portrait = mediaBody(cssCode, '@media(max-width:779px)');
+  assert.match(portrait, /\.controls > h3\{display:none\}/, 'hochkant bleibt er aus');
+
+  for (const sel of ['#pane-foe > .board-col > h3', '#pane-own > .board-col > h3',
+    '#pane-log > .log-card > h3', '.mid > .controls > h3']) {
+    assert.ok(desktopCss.includes(sel), `${sel} wird mittig gesetzt`);
+  }
+  assert.match(desktopCss, /text-align:center/, 'und zwar zentriert');
+});
+
+test('Beide Flotten zeigen ihre Restschiffe, die Aufstellungsregel steht einmal', () => {
+  // Beim Gegner stand die Zahl, bei der eigenen Flotte nicht - man musste die
+  // Uebersicht durchzaehlen, um zu wissen, wie man dasteht.
+  assert.ok(present.has('own-ships'), 'eigene Restflotte hat ein Feld');
+  assert.match(app, /\$\('own-ships'\)\.textContent/, 'und der Client füllt es');
+  assert.match(html, /<h3>Deine Flotte <span id="own-ships"/, 'es steht in der Überschrift');
+
+  // Derselbe Satz zweimal sagt nichts Zusaetzliches: er steht nur bei der
+  // gegnerischen Flotte.
+  const hinweise = (html.match(/Aufstellung: nichts berührt sich/g) || []).length;
+  assert.equal(hinweise, 1, 'die Aufstellungsregel steht genau einmal');
+  const foeSpalte = html.slice(html.indexOf('id="fleet-foe"'), html.indexOf('id="fleet-own"'));
+  assert.match(foeSpalte, /Aufstellung: nichts berührt sich/,
+    'und zwar in der Spalte der gegnerischen Flotte');
+
+  assert.match(desktopCss, /\.fleet-cols > div\{[^}]*text-align:center/,
+    'jede Flotte ist für sich zentriert');
 });
