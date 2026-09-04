@@ -333,6 +333,10 @@ test('Manövermodus gibt dem Kommandofeld die Mittelspalte', () => {
   // Die Regel haengt am Zustand im Markup - ohne die Klasse greift sie nie.
   assert.match(html, /id="maneuver-panel"[^>]*class="[^"]*hidden/,
     'der Modus steht als Klasse im Markup');
+  // Sonst waere die Mittelspalte im Manoevermodus wieder kuerzer als die
+  // Bretter - genau der schwebende Eindruck, den die Reihenangabe beseitigt.
+  assert.ok(/:has\(#maneuver-panel:not\(\.hidden\)\) > \.controls\{[^}]*grid-row:1 \/ 3/.test(desktopCss),
+    'und das Kommandofeld füllt beide Reihen');
   assert.match(app, /\$\('maneuver-panel'\)\.classList\.toggle\('hidden'/,
     'und der Client schaltet genau diese Klasse');
 });

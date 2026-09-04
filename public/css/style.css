@@ -317,6 +317,12 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
      also braucht es dafuer kein zusaetzliches Feld im Client.
      Browser ohne :has() verwerfen die Regel und zeigen weiter beides. */
   .screen#screen-game.active:has(#maneuver-panel:not(.hidden)) #pane-log > .log-card{display:none}
+  /* Und es nimmt beide Reihen ein. Ohne das waere die Mittelspalte im
+     Manoevermodus wieder kuerzer als die Bretter - genau der schwebende
+     Eindruck, den die Reihenangabe oben gerade beseitigt hat. */
+  .screen#screen-game.active:has(#maneuver-panel:not(.hidden)) > .controls{
+    grid-row:1 / 3; align-self:stretch;
+  }
   .screen#screen-game.active > .controls{grid-area:ctrl}
   .screen#screen-game.active .board-col,
   .screen#screen-game.active .card{margin-bottom:0}   /* das macht jetzt gap */
