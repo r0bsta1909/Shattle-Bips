@@ -465,3 +465,29 @@ test('Der Manöver-Umbau gilt nur hochkant', () => {
       `am PC bleibt ${teil} stehen`);
   }
 });
+
+test('Die Regeln im Spiel nennen jede standardmäßig aktive Sonderregel', () => {
+  // Regeltext und Engine laufen sonst auseinander, ohne dass es jemand merkt:
+  // Scheinmanöver und Tauchfahrt gab es zwei Stunden lang, ohne dass sie in
+  // den Regeln standen – und dort stand weiter „um 1 Feld versetzen“.
+  const block = /<summary>Regeln in 90 Sekunden<\/summary>([\s\S]*?)<\/details>/.exec(html);
+  assert.ok(block, 'Regelblock gefunden');
+  const regeln = block[1];
+
+  const pflicht = [
+    [DEFAULT_OPTIONS.decoyCount > 0, 'Köder'],
+    [DEFAULT_OPTIONS.scanEnabled, 'Aufklärung'],
+    [DEFAULT_OPTIONS.diveEnabled, 'Tauchen'],
+    [DEFAULT_OPTIONS.maneuverEnabled, 'Manöver'],
+    [DEFAULT_OPTIONS.fakeManeuver, 'Scheinmanöver'],
+    [DEFAULT_OPTIONS.diveMoveRange > 0, 'Tauchfahrt']
+  ];
+  const fehlt = pflicht.filter(([an, wort]) => an && !regeln.includes(wort)).map(([, w]) => w);
+  assert.deepEqual(fehlt, [], `in den Regeln nicht erklärt: ${fehlt.join(', ')}`);
+
+  // Und keine Zahl behaupten, die nicht mehr stimmt.
+  if (DEFAULT_OPTIONS.maneuverRange > 1) {
+    assert.ok(!/um 1 Feld/.test(regeln),
+      'die Regeln behaupten noch „um 1 Feld“, obwohl weiter gezogen werden darf');
+  }
+});

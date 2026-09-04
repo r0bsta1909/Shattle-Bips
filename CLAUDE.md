@@ -10,6 +10,37 @@ Live: <https://shattle-bips.onrender.com> · Repo: `r0bsta1909/Shattle-Bips` (pu
 
 ---
 
+## Stand
+
+Spielbar gegen Bot und online, mobil wie am PC. Was über Standard-Schiffeversenken hinausgeht:
+**Köder, Aufklärung, Tauchen, Tauchfahrt, Manöver, Scheinmanöver, Salven-Vorrat** — und der
+Satz, aus dem alles folgt: *Das Orakel lügt nie, getäuscht wird über wahre Meldungen.*
+Am Partieende zeigt die **Täuschungsbilanz**, was das bewirkt hat.
+
+Was noch fehlt, steht unter „Noch offen" in der [README](README.md) und im Logbuch. Zwei Dinge
+wurden ausdrücklich vertagt: eine **Notizschicht** auf dem Gegnerraster und ein Modus, der
+**Wiederkehr** erzeugt (Rätsel des Tages). Für beide gilt die Vorgabe des Nutzers:
+
+> Handarbeit, die das System auch erledigen könnte, ist keine Spieltiefe. Hinhören oder
+> Hinsehen muss **belohnt** werden.
+
+## Balance ist messbar — vor Regeländerungen simulieren
+
+```bash
+node tools/sim.mjs 500 --seed=7            # Standardregelsatz
+node tools/sim.mjs 500 --seed=7 --no-diveEnabled   # Wirkung einer Regel isolieren
+```
+
+Zielkorridore: **Startvorteil ≤ 53 %**, **Comeback 35–45 %**. Zwei Ergebnisse, die man kennen
+sollte, bevor man an der Balance dreht:
+
+- **Tauchen und Manöver *sind* der Catch-up-Mechanismus** — jedes trägt gut vier Prozentpunkte.
+- **Naiver Catch-up schadet:** mehr Schüsse für die Verliererseite verkürzt die Partie, und
+  kurze Partien gehören dem Führenden. Und **Beweglichkeit hilft dem Gesunden, also dem
+  Führenden** — Manöver brauchen unbeschädigte Schiffe.
+
+Der Sim misst den **Bot**. Lernt der Bot eine Fähigkeit nicht, misst man sie auch nicht.
+
 ## Woran man zuerst denken sollte
 
 **Der Nutzer spielt und meldet Fehler über den Feedback-Knopf im Spiel.** Sie landen als
@@ -29,15 +60,15 @@ liest dort, *warum* es passiert ist.
 
 | Datei | Rolle |
 |---|---|
-| `server/rules.js` | Regel-Engine, rein, ohne Seiteneffekte. **Einzige Wahrheit über Regeln.** Basis für Server, Bot und Sim. `game.log` ist das vollstaendige Partieprotokoll, `summarize()` liest die Taeuschungsbilanz daraus |
+| `server/rules.js` | Regel-Engine, rein, ohne Seiteneffekte. **Einzige Wahrheit über Regeln.** Basis für Server, Bot und Sim. `game.log` ist das vollständige Partieprotokoll, `summarize()` liest die Täuschungsbilanz daraus — jede Kennzahl ist eine **Leseart** des Protokolls, gezählt wird während der Partie nichts |
 | `server/rooms.js` | Lobbys, Zugtimer, Optionen, Revanche, Bot-Züge, autoritative Zustandsverteilung |
 | `server/index.js` | Express (statisch) + WebSocket + `/version` + `/api/feedback` |
 | `server/version.js` | Programmstand für die Kopfzeile |
 | `server/feedback.js` | Freitext-Feedback, drei Senken, Missbrauchsbremse, Diagnose |
 | `server/bot.js` | Probability-Density-Zielwahl, Ködererkennung, Gegnermodell |
-| `public/` | Client ohne Build-Schritt. Effekte (Einblendung, Ton) haengen am **Ereignisstrom** (`emit`/`onEvent`) – ein neuer Effekt ist eine Zeile, kein Suchen in Nachrichtenzweigen |
+| `public/` | Client ohne Build-Schritt. Effekte (Einblendung, Ton) hängen am **Ereignisstrom** (`emit`/`onEvent`) — ein neuer Effekt ist eine Zeile, kein Suchen in Nachrichtenzweigen |
 | `tools/sim.mjs` | Headless-Balancing auf derselben Engine, mit denselben Optionen |
-| `tools/shot.mjs` | Bildschirmfoto der Spielansicht ueber Chrome headless - macht Layout pruefbar |
+| `tools/shot.mjs` | Bildschirmfoto der Spielansicht über Chrome headless — macht Layout prüfbar. Die Seite läuft in einem `<iframe>` exakter Größe, sonst rendert Chrome breiter als das Bild. Schreibt Chrome nichts, **scheitert das Werkzeug laut** statt Erfolg zu melden |
 | `test/` | siehe unten |
 
 **Der Server ist autoritativ.** Der Client bekommt nie die gegnerische Flotte — nur sein Brett,
@@ -56,7 +87,7 @@ npm run e2e:options       # Optionen, Zug-Timeout, Revanche
 npm run e2e:feedback      # /version und /api/feedback über echtes HTTP
 node tools/sim.mjs 800 --singleShotAfterHit    # Balancing mit Lobby-Optionen
 node tools/shot.mjs 1440x900                   # Layout ansehen, ohne zu spielen
-node tools/shot.mjs 393x852                    # dasselbe hochkant
+node tools/shot.mjs 390x844 maneuver            # hochkant, mit offenem Manöverfeld
 ```
 
 **Vor jedem Push:** `npm test` **und** alle vier e2e-Suiten. Sie sind schnell und haben in
@@ -77,7 +108,8 @@ curl -s https://shattle-bips.onrender.com/api/feedback/status   # Feedback-Weg i
 | `test/sim.test.js` | Sim-Kommandozeile |
 | `test/feedback.test.js` | Validierung, Bremsen, Memory-Senke |
 | `test/github-sink.test.js` | GitHub-Senke gegen lokalen API-Nachbau, Diagnose |
-| `test/client.test.js` | **statische Kopplung Client ↔ Markup.** Kein Build, keine Typen — hier fällt auf, was sonst erst im Browser auffällt |
+| `test/client.test.js` | **statische Kopplung Client ↔ Markup ↔ Regeln.** Kein Build, keine Typen — hier fällt auf, was sonst erst im Browser auffällt. Auch: jede Standard-Sonderregel muss in „Regeln in 90 Sekunden" stehen |
+| `test/client-render.test.js` | **führt `app.js` wirklich aus**, in einem selbstgeschriebenen Mini-DOM, angetrieben über `ws.onmessage`. Fängt Rendering-Fehler, die statisch unsichtbar sind. Ist der Prüfstand schwächer als der Browser, wird **er** repariert, nicht der Test |
 | `test/playtest-bugs.test.js` | **jede Fehlermeldung aus dem Playtest, mit Issue-Nummer.** Neue Meldung ⇒ neuer Test hier |
 | `test/e2e-*.mjs` | echte WebSocket-/HTTP-Wege gegen den laufenden Server |
 
@@ -105,7 +137,7 @@ dann `docs/SESSIONS.md`.
 
 ## Was hier nicht angetastet wird
 
-- **`localStorage`-Schlüssel `nebel.token` / `nebel.code` / `nebel.name`.** Heißen absichtlich
+- **`localStorage`-Schlüssel `nebel.*`** (`token`, `code`, `name`, `ton`). Heißen absichtlich
   noch so: umbenennen kostet laufende Sitzungen ihr Token. Sie sind nicht sichtbar.
 - **`GITHUB_TOKEN`** steht nur in Renders Environment, nie im Repo. In `render.yaml` ist die
   Variable als `sync: false` deklariert.

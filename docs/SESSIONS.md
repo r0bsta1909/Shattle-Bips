@@ -7,6 +7,31 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-04 (Abschluss) · Regeltext nachgezogen, Übergabe gerichtet
+
+**Befund:** Die „Regeln in 90 Sekunden" im Spiel waren veraltet — dort stand weiter „um 1 Feld
+versetzen", und Scheinmanöver wie Tauchfahrt fehlten ganz. Dieselben Lücken in der README,
+dazu die Bedienungsbeschreibung (behauptete noch `min(9vw,34px)` und eine klebende Leiste)
+und eine „Noch offen"-Liste, die Sound als fehlend führte.
+
+**Geändert**
+- Regeln im Spiel und in der README auf den heutigen Stand: Manöverweite nach Schiffsgröße,
+  Scheinmanöver als Befehl, Tauchfahrt, und beim Tauchen der Hinweis, dass es ein Tauschgeschäft
+  ist — der Gegner erfährt, in welchen Feldern das Boot liegt.
+- Optionstabelle der README um die fünf fehlenden Einstellungen ergänzt (jetzt vollständig).
+- CLAUDE.md: **Stand**-Abschnitt als Einstieg, ein Abschnitt zur Balance mit den Zielkorridoren
+  und den zwei Ergebnissen, die man vor Regeländerungen kennen muss. `client-render.test.js`
+  fehlte in der Testtabelle — ausgerechnet die Schicht, die `app.js` wirklich ausführt.
+
+**Neuer Test, der das nicht wieder passieren lässt:** Jede standardmäßig aktive Sonderregel muss
+in „Regeln in 90 Sekunden" vorkommen, und der Text darf keine Zahl behaupten, die `DEFAULT_OPTIONS`
+widerspricht. Er ist beim Schreiben sofort gefallen und hat genau die zwei fehlenden Regeln
+benannt.
+
+**Gelernt:** Regeltext ist Code-nah genug, um zu verrotten, aber nicht Teil der Engine — also
+braucht er eine Kopplung. Vier Runden lang wurden Regeln geändert, ohne dass jemand den Text
+angefasst hätte; aufgefallen ist es erst auf Nachfrage.
+
 ## 2026-09-04 (Fortsetzung) · Manövermodus hochkant benutzbar
 
 Gemeldet vom Gerät: das Manöverfeld füllte den ganzen Schirm, vom Brett blieb eine Zeile.

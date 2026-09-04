@@ -44,9 +44,15 @@ weiterlaufen:
 von einem Zerstörer nicht zu unterscheiden — bis der Trefferblock rundum von Wasser
 umschlossen ist.
 
-**Manöver:** Statt einer Salve ein **unbeschädigtes** Schiff um 1 Feld versetzen oder um 90°
-drehen. Zielfelder müssen frei, berührungsfrei und **noch nie beschossen** sein. Der Gegner
-hört nur „Flotte manövriert" — ohne Ort. Beschädigte Schiffe sind fixiert.
+**Manöver:** Statt einer Salve ein **unbeschädigtes** Schiff versetzen oder um 90° drehen.
+Die Weite hängt an der Größe: bis 3 Felder Länge zwei Felder weit, ab 4 Feldern eines — träge
+Kähne, wendige Boote. Zielfelder müssen frei, berührungsfrei und **noch nie beschossen** sein.
+Beschädigte Schiffe sind fixiert.
+
+**Scheinmanöver:** Ein Manöver ist ein *Befehl*, keine Ortsveränderung — „Position halten" ist
+einer davon. Der Gegner hört in jedem Fall nur „Flotte manövriert", ohne Ort und ohne zu
+erfahren, ob überhaupt etwas gefahren ist. Damit ist **jede** solche Meldung mehrdeutig, und
+genau das macht die echten Manöver wertvoll. Das Orakel lügt dabei nicht: der Befehl erging.
 
 **Aufklärung** (Träger lebt): Ein Schuss der Salve wird zu einem 3×3-Scan. Antwort ist nur
 die **Anzahl** belegter Felder. Köder zählen nicht mit. Ein Scan pro Zug.
@@ -55,6 +61,15 @@ die **Anzahl** belegter Felder. Köder zählen nicht mit. Ein Scan pro Zug.
 das U-Boot melden „Wasser". Danach erhält der Gegner die Meldung „U-Boot ausgewichen" —
 und **alle Wasser-Meldungen dieser Salve werden auf unbekannt zurückgesetzt**. Er weiß also,
 dass eine seiner Auskünfte wertlos war, aber nicht welche, und muss die Felder erneut prüfen.
+
+Der Preis dafür: er weiß nun, dass das Boot in einem der Felder **dieser** Salve liegt. Tauchen
+ist kein Schutzschild, sondern ein Tauschgeschäft — eine Salve Zeit gegen einen groben
+Ortungshinweis. Wer mitliest, zieht daraus Nutzen; das Brett zeigt es nicht, der Funkverkehr
+schon.
+
+**Tauchfahrt** (U-Boot unbeschädigt): Statt eines Schusses der **ganze Zug** — dafür taucht das
+Boot *und* verlegt sich bis zu 3 Felder. Die einzige Bewegung unter Wasser, und die einzige
+Fähigkeit, die kein anderes Schiff hat. Der Gegner hört auch hier nur „Flotte manövriert".
 
 **Sieg:** Wer zuerst alle fünf Schiffe des Gegners versenkt. Köder sind für den Sieg irrelevant.
 
@@ -83,6 +98,11 @@ Stellschraube im Playtest verschieben, ohne Code anzufassen:
 | Eröffnungsausgleich | an | Startspieler hat im ersten Zug 1 Schuss |
 | **Nach Treffer nur Einzelschuss** | aus | Jagdmodus: wer im letzten Zug getroffen hat, schießt nur einmal |
 | Aufklärung / Tauchen / Manöver | an | einzeln abschaltbar |
+| Manöverweite | 2 | Felder für kleine Schiffe, große die Hälfte. **1 = altes Verhalten** |
+| Scheinmanöver | an | „Position halten" als Manöverbefehl erlauben |
+| Tauchfahrt-Weite | 3 | Felder je Tauchfahrt. **0 = abgeschaltet** |
+| Salven-Vorrat / Größe | aus / 8 | Kontingent voller Salven, danach nur Einzelschuss |
+| Bot-Bedenkzeit | 3–6 s | pro Zug neu gewürfelt; 0/0 = ohne Pause (für die Prüfstände) |
 
 Der Jagdmodus ist die Antwort auf den Verdacht, dass eine volle Salve nach einem Treffer zu
 stark ist: Suchen bleibt breit, Nachsetzen wird teuer.
@@ -293,15 +313,17 @@ Zweck da.
 ## Bedienung
 
 - **Scans bleiben sichtbar.** Jedes aufgeklärte 3×3-Feld behält eine Umrandung auf dem Gegnerraster, im Mittelpunkt steht die gemeldete Anzahl. Man sieht also jederzeit, wo man schon hingeschaut hat und was dabei herauskam.
-- **Manöver:** Knopf drücken, dann Schiff antippen — entweder in der Liste oder direkt auf dem eigenen Raster. Das gewählte Schiff wird gelb umrandet, danach Richtung wählen.
-- **Mobile first.** Zellgröße skaliert mit dem Viewport (`min(9vw, 34px)`), Bedienleiste klebt unten am Bildschirmrand, alle Tippziele mindestens 44 px. Ab 780 px Breite schaltet das Layout zweispaltig.
+- **Manöver:** Knopf drücken — die Ansicht springt auf das eigene Brett. Schiff antippen (auf dem Raster oder, am PC, in der Liste); die **erreichbaren Felder werden hell**, unmögliche Richtungen sind gesperrt. Der Server rechnet das aus, damit die Regeln an einer Stelle bleiben. Bewusst **keine** Zielempfehlung: Handarbeit, die das System auch könnte, ist keine Spieltiefe — eine Empfehlung nähme die Entscheidung ganz weg.
+- **Täuschungsbilanz.** Am Partieende steht, was Köder, Tauchen und Manöver bewirkt haben — inklusive „deine Manöver haben *n* Schüsse ins Leere gezogen". Der Server liest das aus dem Partieprotokoll; während der Partie wird nichts mitgezählt.
+- **Ton** aus reinen Oszillatoren, keine Dateien: Sonar-Ping für die Aufklärung, Schlag für Treffer, absackender Ton fürs Versenken. Schalter in der Kopfzeile.
+- **Mobile first.** Zellgröße an **beide** Achsen gekoppelt (`clamp` über `100vw` und `100dvh`), damit das Brett hochkant wie quer ganz auf den Schirm passt. Hochkant ist die Spielansicht genau schirmhoch und scrollt nicht; ein Umschalter wählt Gegner / eigene Flotte / Funk. Alle Tippziele mindestens 44 px. Ab 780 px stehen beide Bretter nebeneinander, die Kommandozentrale dazwischen.
 
 ## Noch offen
 
-- Ladder und Statistiken (brauchen Persistenz).
+- Ladder und Statistiken (brauchen Persistenz — es gibt bewusst keine Datenbank).
 - Replay-Overlay mit der Wahrscheinlichkeitskarte nach Partieende.
-- Sound.
 - Bot-Abnahme gegen Menschen: Zielkorridor 55–65 % Siegrate gegen erfahrene Spieler.
-- Das mobile Layout ist nach Viewport-Breiten gebaut, aber nicht auf echten Geräten getestet.
-- Der Jagdmodus ist simuliert, aber nicht gegen Menschen gespielt. Die 57 Züge im Schnitt sind der Punkt, an dem er scheitern könnte.
+- Der Jagdmodus und der Salven-Vorrat sind simuliert, aber nicht gegen Menschen gespielt.
+- Timeout-Regel (zwei verpasste Züge = Aufgabe) ist fest verdrahtet — Kandidat für eine Option.
+- Die Lobby hat 17 Einstellungen in einer flachen Liste. Vor der nächsten wäre Gruppierung fällig.
 - Feedback in der Memory-Senke überlebt keinen Neustart. Das ist Absicht — wer es dauerhaft braucht, nimmt `github` oder `webhook`.
