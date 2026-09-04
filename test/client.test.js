@@ -21,6 +21,27 @@ const css = readFileSync(path.join(ROOT, 'public/css/style.css'), 'utf8');
 // der Test schlug an der eigenen Prosa fehl.
 const cssCode = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
+/**
+ * Alle Rumpfe der Media-Bloecke mit diesem Kopf, aneinandergehaengt.
+ * Klammern werden gezaehlt: in einem @media-Block stehen wieder Regeln mit
+ * Klammern, ein `.*?` bis zur naechsten schliessenden erwischt nur die erste.
+ */
+function mediaBody(source, marker) {
+  let out = '';
+  for (let at = source.indexOf(marker); at !== -1; at = source.indexOf(marker, at)) {
+    let i = source.indexOf('{', at) + 1;
+    const start = i;
+    for (let depth = 1; i < source.length && depth > 0; i++) {
+      if (source[i] === '{') depth++;
+      else if (source[i] === '}') depth--;
+    }
+    out += `${source.slice(start, i - 1)}\n`;
+    at = i;
+  }
+  return out;
+}
+const desktopCss = mediaBody(cssCode, '@media(min-width:780px)');
+
 const referenced = [...app.matchAll(/\$\(\s*'([^']+)'\s*\)/g)].map((m) => m[1]);
 const present = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
 
@@ -134,19 +155,28 @@ test('Kachelgröße ist an Breite UND Höhe gekoppelt', () => {
   // Loeste die Hochkant-Meldung aus: --cs stand auf min(9vw,34px), landete auf
   // jedem iPhone bei 34px, und mit der Rasterbeschriftung passte das Brett
   // nicht mehr in die Breite.
-  const decls = [...cssCode.matchAll(/--cs\s*:\s*([^;]+);/g)].map((m) => m[1].trim());
-  assert.ok(decls.length >= 2, 'Rückfallwert und moderne Fassung vorhanden');
+  // Bis zum ";" ODER zur "}" lesen: die letzte Deklaration einer Regel hat
+  // kein Semikolon, und ein /[^;]+;/ lief dann bis weit in die naechste Regel.
+  const decls = [...cssCode.matchAll(/--cs\s*:\s*([^;}]+)/g)].map((m) => m[1].trim());
+  assert.ok(decls.some((d) => !d.includes('clamp(')), 'Rückfallwert für alte Browser');
 
-  const modern = decls[decls.length - 1];
-  assert.match(modern, /clamp\(/, 'Unter- und Obergrenze gesetzt');
-  assert.match(modern, /100vw/, 'Breite berücksichtigt');
-  assert.match(modern, /dvh/, 'Höhe berücksichtigt – sonst ragt das Brett quer heraus');
+  // Frueher stand hier: "im ERSTEN 780px-Block darf kein --cs stehen". Das war
+  // eine Ortsangabe, keine Regel - ein zweiter Block haette sie umgangen.
+  // Geprueft wird jetzt die Regel selbst: JEDE gerechnete Fassung nennt beide
+  // Achsen. Sonst ragt das Brett genau dort heraus, wo die Kopplung fehlt.
+  const modern = decls.filter((d) => d.includes('clamp('));
+  assert.ok(modern.length >= 3, 'Grundfassung, Hochkant und Breitbild gerechnet');
+  for (const d of modern) {
+    assert.match(d, /100vw/, `Breite fehlt in "${d}"`);
+    assert.match(d, /dvh/, `Höhe fehlt in "${d}" – sonst ragt das Brett heraus`);
+  }
 
-  // Der 780px-Block darf --cs nicht mehr hart setzen, sonst ist die
-  // Hoehenkopplung genau dort wieder weg, wo sie gebraucht wird.
-  const wide = cssCode.slice(cssCode.indexOf('@media(min-width:780px)'));
-  assert.ok(!/--cs\s*:/.test(wide.slice(0, wide.indexOf('}\n}') + 3)),
-    'im Breitbild-Block wird --cs nicht überschrieben');
+  // Am PC stehen ZWEI Bretter nebeneinander. Teilt die Breite dort weiter
+  // durch 10, ist die Rechnung um ein ganzes Brett zu grosszuegig.
+  const wideCs = /#screen-game\{--cs:([^}]+)\}/.exec(desktopCss);
+  assert.ok(wideCs, 'Breitbild rechnet eine eigene Kachelgröße');
+  assert.match(wideCs[1], /100vw[^,]*\/\s*20/,
+    'zwei Bretter teilen sich die Breite');
 });
 
 test('Sichere Bereiche und Kopfzeilenhöhe sind berücksichtigt', () => {
@@ -170,4 +200,64 @@ test('Spielansicht steht hochkant fest und scrollt nicht (#22, #23)', () => {
   // die Klasse gar nicht mehr - sie steht fest im Gitter.
   assert.ok(!/\.controls\.sticky/.test(cssCode), 'nichts klebt mehr über dem Brett');
   assert.ok(!/class="controls card sticky"/.test(html), 'auch nicht im Markup');
+});
+
+// ------------------------------------------------------ Spieltisch am PC
+// Der Umbau fuer das Telefon (Runde 3) hat den PC unbrauchbar gemacht, ohne
+// dass ein Test angeschlagen haette: die Bretter lagen untereinander, die
+// Bedienspalte war 155px schmal und schnitt ihre Knopfbeschriftung ab.
+// Gemeldet per Screenshot, nicht per Feedback-Knopf - deshalb hier und nicht
+// in playtest-bugs.test.js, das nach Issue-Nummern indiziert.
+
+test('Am PC stehen beide Bretter nebeneinander', () => {
+  const areas = /grid-template-areas:([^;]+);/.exec(desktopCss);
+  assert.ok(areas, 'Breitbild ordnet die Bereiche in Flächen an');
+
+  const rows = [...areas[1].matchAll(/"([^"]+)"/g)].map((m) => m[1].split(/\s+/).filter(Boolean));
+  assert.ok(rows.length >= 2, 'mindestens zwei Reihen');
+  assert.ok(rows[0].includes('foe') && rows[0].includes('own'),
+    'Gegnerbrett und eigenes Brett in derselben Reihe – sonst stapeln sie sich');
+  assert.ok(rows[0].includes('ctrl'), 'die Bedienung steht daneben, nicht darunter');
+
+  // Ohne display:contents bleiben Brett und Flottenuebersicht in einem Kasten
+  // und lassen sich nicht getrennt setzen.
+  assert.match(desktopCss, /\.game-pane\{[^}]*display:contents/,
+    'die Bereiche geben ihre Kinder ans Raster ab');
+  assert.match(desktopCss, /\.game-pane\{display:block ?!important/,
+    'display:block bleibt als Rückfall für Browser ohne display:contents');
+
+  for (const area of ['foe', 'own', 'info', 'log', 'ctrl']) {
+    // Zeichenklasse statt \b: ein Escape in einem Template-Literal wird vom
+    // JS-Parser gelesen, bevor die RegExp ihn sieht - "\b" ist dort ein
+    // Rueckschritt-Zeichen, keine Wortgrenze.
+    assert.match(desktopCss, new RegExp(`grid-area:${area}[;}]`), `${area} ist gesetzt`);
+  }
+
+  // Die alte Aufteilung: eine auto-Spalte nimmt sich die max-content-Breite
+  // ihres breitesten Kindes, 1fr bekommt nur den Rest.
+  assert.ok(!/grid-template-columns:auto 1fr/.test(desktopCss),
+    'keine auto-Spalte mehr, die der Bedienung den Platz wegnimmt');
+  const cols = /grid-template-columns:([^;]+);/.exec(desktopCss);
+  assert.match(cols[1], /minmax\(/, 'die Bedienspalte hat eine Untergrenze');
+});
+
+test('Aktionsknöpfe werden am PC nicht gequetscht', () => {
+  // Die globale Regel ist fuer das Telefon: vier Knoepfe muessen in eine
+  // Zeile, also duerfen sie unter ihre Textbreite schrumpfen. In einer
+  // schmalen Seitenspalte stand danach "Feue", "Aufklae", "Tauch".
+  assert.match(cssCode, /\.row\.actions button\{[^}]*min-width:0/,
+    'die enge Fassung existiert weiterhin');
+  assert.match(desktopCss, /\.row\.actions\{[^}]*flex-direction:column/,
+    'am PC untereinander – dort ist die Spalte schmal, nicht der Schirm');
+});
+
+test('Die Breitengrenze hängt am Bildschirm, nicht an main', () => {
+  // Solange main auf 1100px deckelte, konnte kein einzelner Bildschirm
+  // ausscheren - zwei Bretter plus Bedienung passen da nicht hinein.
+  assert.ok(!/(^|\n)main\{[^}]*max-width/.test(cssCode),
+    'main deckelt nicht mehr alle Bildschirme');
+  assert.match(cssCode, /\.screen\{[^}]*max-width:1100px/,
+    'die Lesebreite liegt jetzt am einzelnen Bildschirm');
+  assert.match(desktopCss, /#screen-game\.active\{[^}]*max-width:none/,
+    'die Spielansicht hebt sie auf');
 });

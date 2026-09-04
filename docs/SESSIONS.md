@@ -7,6 +7,55 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-04 · Spieltisch für den PC
+
+Aus einem Screenshot vom PC. Der Nutzer bestätigt Mobil („sieht wirklich gut aus"), meldet
+aber: „am pc ist es dafür unbrauchbar geworden". Der Umbau aus Runde 3 hatte den PC zerlegt,
+**ohne dass ein Test angeschlagen hätte** — 113 Tests grün, Anwendung kaputt.
+
+**Geändert** (nur `@media(min-width:780px)`, Mobil blieb unberührt)
+- Beide Bretter **nebeneinander** statt untereinander: `grid-template-areas` mit
+  `display:contents` auf den Bereichen, damit Brett und Flottenübersicht getrennt platzierbar
+  sind. Bedienung als Seitenspalte, Funk darunter, Übersicht quer unter den Brettern.
+- Aktionsknöpfe am PC **untereinander** statt in einer Zeile — dort ist die Spalte schmal,
+  nicht der Schirm. Vorher stand da „Feue", „Aufklä", „Tauch".
+- Bedienspalte `minmax(200px,300px)` statt `1fr`; `max-width` von `main` an `.screen`
+  umgehängt, damit die Spielansicht ausscheren kann.
+- Kacheln am PC bis **52px** (vorher 34): `(100vw − 470px)/20`, weil sich zwei Bretter die
+  Breite teilen. Aufstellung wächst mit (bis 44px), sonst stellt man klein auf und spielt groß.
+- Einblendung liegt am PC **über dem Gegnerbrett** statt in der Bildmitte.
+
+**Gelernt**
+- Eine Regel für den engsten Fall (`min-width:0`, damit vier Knöpfe auf ein Telefon passen)
+  darf nicht global stehen. `min-width:0` schneidet Text ab, ohne einen Überlauf zu erzeugen:
+  es sieht falsch aus, es bricht nichts — deshalb fällt es nur am Gerät auf.
+- `grid-template-columns:auto 1fr`: die `auto`-Spalte nimmt max-content, `1fr` sichert
+  **keinen** Anteil zu. Wer eine Mindestbreite braucht, schreibt `minmax()`.
+- Der alte `--cs`-Test prüfte eine **Ortsangabe** („im ersten 780px-Block kein `--cs`"), nicht
+  die Regel. Jetzt: jede gerechnete Fassung nennt beide Achsen — das kann kein zweiter Block
+  mehr umgehen.
+- Mein erster Höhenansatz (330px) hätte auf 1440×900, 1366×768 und 1280×800 **gescrollt**;
+  die Funkkarte in Reihe 2 war nicht eingerechnet. Nachgerechnet statt geschätzt → 440px.
+
+**Nachgerechnet** (Kachelgröße · Gesamtbreite · passt senkrecht)
+
+| Schirm | Kachel | Breite | Höhe |
+|---|---|---|---|
+| 1920×1080 | 52,0 | 1498 | passt |
+| 1440×900 | 46,0 | 1378 | passt |
+| 1366×768 | 32,8 | 1114 | passt |
+| 1024×768 | 27,7 | 1012 | passt |
+| 852×393 (iPhone quer) | 20,0 | 852 | scrollt |
+
+Tests 113 → 116, alle vier e2e-Suiten grün. Jeder neue Test gegen den kaputten Stand
+gegengeprüft: Spalten zurück auf `auto 1fr`, Knopfregel ohne Ausnahme, `max-width` zurück an
+`main`, Breite durch 10 — jedes Mal fiel genau der zuständige Test.
+
+**Offen**
+- Am PC gegenprüfen: kein waagerechter Rollbalken, keine abgeschnittene Beschriftung.
+- Am iPhone gegenprüfen, dass Mobil **unverändert** ist (berührt wurde nur `main`/`.screen`,
+  greift erst ab 1100px).
+
 ## 2026-09-03 (Fortsetzung) · `4fd10db` · Ereignis-Einblendung
 
 **Geändert**

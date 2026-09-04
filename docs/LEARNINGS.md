@@ -66,6 +66,13 @@ zweimal zugeschlagen — beim zweiten Mal ausgerechnet in dem Satz, der sie besc
 Abgesichert: `test/client.test.js` prüft, dass `content:`-Werte genau ein Zeichen lang sind,
 und sucht in den ausgelieferten Dateien nach Mojibake-Markern.
 
+**Dritter Treffer, andere Werkzeugkette:** Ein `\\b` in einem Test kam als `\b` an — im
+Template-Literal einer `new RegExp()` ist das ein Rückschritt-Zeichen, keine Wortgrenze, also
+passte das Muster auf nichts. Vorher hatte ich einen Rundlauf-Test gemacht: **Umlaute** kamen
+sauber durch, deshalb hielt ich den Weg für sicher. Backslashes hatte ich nicht geprüft.
+**Regel:** Ein Rundlauf-Test beweist nur, was er testet. Sonderzeichen sind nicht eine Klasse,
+sondern mehrere. Sicherer Ausweg ohne Escape: `[;}]` statt `\b`, Zeichenklasse statt Grenze.
+
 ### Den Client wirklich ausführen, nicht nur statisch prüfen
 Drei Rendering-Regressionen in Folge (#9, #10, #17) waren statisch unsichtbar.
 `test/client-render.test.js` fährt `app.js` in einem selbstgeschriebenen Mini-DOM hoch und
@@ -109,6 +116,37 @@ nächsten Knopf. **Regel:** Die Spielansicht ist hochkant genau schirmhoch (`100
 gemessener Kopfzeile), scrollt selbst nicht, und ein Umschalter wählt den sichtbaren Bereich.
 Was gehandelt wird, steht immer da; was nachgeschlagen wird, ist einen Tipp entfernt.
 Quer bleibt alles gleichzeitig sichtbar — dort ist Platz.
+
+### Eine Regel für den engsten Fall gehört in den Media-Block des engsten Falls
+**Symptom:** Der Umbau fürs Telefon war abgenommen — und machte den PC unbrauchbar. Vier
+Knöpfe hießen dort „Feue", „Aufklä", „Tauch", beide Bretter lagen untereinander auf einer
+2500 px hohen Seite, und rechts blieben 600 px leer. **Kein einziger Test schlug an.**
+
+**Ursache:** zwei CSS-Eigenheiten, beide leise:
+- `.row.actions button{flex:1 1 0;min-width:0}` stand **global**. Es ist die Telefonlösung
+  (vier Knöpfe müssen in eine Zeile passen). `min-width:0` erlaubt dem Knopf, schmaler zu
+  werden als sein Text — der läuft dann über und wird vom Hintergrund des Nachbarn
+  überdeckt. Es *sieht* falsch aus, es *bricht* nichts: keine Ausnahme, kein Überlauf.
+- `grid-template-columns:auto 1fr` — die `auto`-Spalte nimmt sich die **max-content**-Breite
+  ihres breitesten Kindes (hier die Flottenübersicht, ~660 px). `1fr` sichert **keinen**
+  Anteil zu, es verteilt nur, was übrig bleibt: 155 px.
+
+**Regel:** Was für den engsten Fall gebaut ist, steht im Media-Block des engsten Falls, nicht
+global. Und eine Spalte, die nicht beliebig schrumpfen darf, braucht `minmax()`, kein `1fr`.
+Nebenbei: eine Breitengrenze (`max-width`) gehört an den einzelnen Bildschirm, nicht an
+`main` — sonst kann kein Bildschirm ausscheren, wenn er einmal mehr Platz braucht.
+
+Nützlich dabei: `display:contents` auf einem Zwischenbehälter gibt dessen Kinder ans Raster
+ab, sodass sie einzeln in Flächen gesetzt werden können — mit `display:block` davor als
+Rückfall, dasselbe Muster wie bei `--cs`.
+
+### Ein Test, der eine Ortsangabe prüft, prüft nicht die Regel
+Der `--cs`-Test verlangte: „im **ersten** `@media(min-width:780px)`-Block steht kein `--cs`".
+Gemeint war: „die Höhenkopplung darf nirgends verloren gehen". Ein zweiter Block hätte die
+Prüfung wortlos umgangen. **Regel:** Die Bedingung so formulieren, wie die Regel lautet —
+hier: *jede* gerechnete Fassung von `--cs` nennt Breite **und** Höhe. Beim Zerlegen von CSS
+Klammern zählen; ein `@media`-Rumpf enthält wieder Regeln mit Klammern, ein `.*?` bis zur
+nächsten schließenden erwischt nur die erste.
 
 ### Nicht jedes Ereignis steht in einer Nachricht
 Dass der Gegner ein eigenes Schiff versenkt hat, wird nirgends gemeldet: die Salve geht an

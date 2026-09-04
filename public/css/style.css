@@ -50,8 +50,8 @@ dialog.sheet textarea{font:inherit;width:100%;border-radius:9px;border:1px solid
 dialog.sheet textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .msg-ok{color:var(--scan)}
 .msg-err{color:var(--hit)}
-main{padding:12px;max-width:1100px;margin:0 auto}
-.screen{display:none}.screen.active{display:block}
+main{padding:12px;margin:0 auto}
+.screen{display:none;max-width:1100px;margin:0 auto}.screen.active{display:block}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
   padding:14px;margin-bottom:12px}
@@ -130,7 +130,7 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
   main{padding:20px}
   h1{font-size:22px}
   .screen#screen-game{display:none}
-  .screen#screen-game.active{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start}
+  .screen#screen-game.active{display:grid;gap:18px;align-items:start}
   .place-wrap{flex-direction:row}
   .place-side{flex:1;min-width:250px}
   .row.stack>button{flex:0 1 auto}
@@ -245,13 +245,48 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
 }
 
 @media(min-width:780px){
-  /* Quer ist alles gleichzeitig sichtbar, der Umschalter waere nur im Weg. */
+  /* ================================================== Spieltisch (Breitbild)
+     Am PC ist Platz fuer beides nebeneinander. Vorher lagen alle drei Bereiche
+     untereinander in Spalte 1 (`auto`) und die Bedienung bekam als `1fr` nur
+     den Rest - rund 155px, in denen die Knopfbeschriftung abgeschnitten wurde.
+     Eine `auto`-Spalte nimmt sich die max-content-Breite ihres breitesten
+     Kindes; `1fr` sichert keinen Anteil zu, es verteilt nur, was uebrig ist. */
   .game-tabs{display:none}
-  .game-pane{display:block !important}
-  .screen#screen-game.active > #pane-foe,
-  .screen#screen-game.active > #pane-own,
-  .screen#screen-game.active > #pane-log{grid-column:1}
-  .screen#screen-game.active > .controls{grid-column:2;grid-row:1 / -1}
+
+  /* Die Bereiche verschwinden als Kasten: ihre Kinder werden selbst zu
+     Rasterfeldern und lassen sich einzeln setzen. Ohne das haengen Brett und
+     Flottenuebersicht zwangsweise in derselben Spalte.
+     display:block bleibt als Rueckfall stehen - dasselbe Muster wie bei --cs:
+     eine ungueltige Deklaration verwirft nur sich selbst. */
+  .game-pane{display:block !important;display:contents !important}
+
+  .screen#screen-game.active{
+    max-width:none;              /* zwei Bretter passen nicht in 1100px */
+    position:relative;           /* Bezug fuer die Einblendung */
+    justify-content:center;      /* Rest der Breite links und rechts */
+    grid-template-columns:max-content max-content minmax(200px,300px);
+    grid-template-rows:auto auto;
+    grid-template-areas:
+      "foe  own  ctrl"
+      "info info log";
+  }
+  #pane-foe > .board-col{grid-area:foe}
+  #pane-own > .board-col{grid-area:own}
+  #pane-own > .info     {grid-area:info}
+  #pane-log > .log-card {grid-area:log}
+  .screen#screen-game.active > .controls{grid-area:ctrl}
+  .screen#screen-game.active .board-col,
+  .screen#screen-game.active .card{margin-bottom:0}   /* das macht jetzt gap */
+
+  /* Vier Knoepfe nebeneinander ist die Handy-Loesung. In einer 200-300px
+     breiten Spalte schneiden sie ihre Beschriftung ab - untereinander nicht. */
+  .row.actions{flex-direction:column;align-items:stretch}
+  .row.actions button{flex:0 0 auto;padding:11px 13px;font-size:15px}
+
+  /* Die Einblendung gehoert dorthin, wo man hinschaut: ueber das Gegnerbrett.
+     In der Bildmitte laege sie auf einem Breitbild neben dem Geschehen. Ein
+     absolut gesetztes Rasterkind mit grid-area nimmt seine Flaeche als Bezug. */
+  #flash{position:absolute;grid-area:foe;top:45%}
 }
 
 /* ===================================================== Ereignis-Einblendung
@@ -302,4 +337,22 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
 #screen-game{--cs:clamp(24px, min((100vw - 72px) / 10, (100dvh - 200px) / 10), 34px)}
 @media(max-width:779px){
   #screen-game{--cs:clamp(22px, min((100vw - 72px) / 10, (100dvh - 330px) / 10), 34px)}
+}
+
+/* Am PC teilen sich ZWEI Bretter die Breite - daher /20 statt /10.
+   Die 470px sind alles daneben: Seitenrand 2x20, zwei Luecken a 18, die
+   Bedienspalte bis 300, je Brett Achsenstreifen+Rahmen 41, plus Reserve.
+   Gerechnet mit der MAXIMALEN Bedienspalte, damit die Kacheln nie zu gross
+   geschaetzt werden - Rastergleise schrumpfen notfalls bis zu ihrem Minimum.
+
+   Die Hoehe bleibt gekoppelt. Die 440px: Kopfzeile 64, Raender 40, Ueberschrift
+   26, Luecke 18, Rasterrahmen 39 und die Funkkarte in Reihe 2 mit bis zu 244
+   (max-height der Liste). Ohne die Kopplung ragt das Brett heraus - der Fehler,
+   der cacd71a ausgeloest hat.
+
+   Die Aufstellung waechst mit: sonst stellt man auf 34px-Kacheln auf und
+   spielt danach auf 52px. */
+@media(min-width:780px){
+  #screen-game{--cs:clamp(20px, min((100vw - 470px) / 20, (100dvh - 440px) / 10), 52px)}
+  #screen-placement{--cs:clamp(24px, min((100vw - 400px) / 10, (100dvh - 260px) / 10), 44px)}
 }
