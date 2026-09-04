@@ -7,6 +7,36 @@ Dauerhafte Fallen gehören nicht hierher, sondern in [LEARNINGS.md](LEARNINGS.md
 
 ---
 
+## 2026-09-04 (Fortsetzung) · Manövermodus hochkant benutzbar
+
+Gemeldet vom Gerät: das Manöverfeld füllte den ganzen Schirm, vom Brett blieb eine Zeile.
+
+**Ursache:** Die Ansicht ist hochkant schirmhoch (`auto 1fr auto`). Das aufgeklappte Feld ließ
+die `auto`-Zeile der Bedienleiste über den Schirm wachsen und drückte das `1fr` auf null.
+Dazu ein zweiter, unabhängiger Fehler: die erreichbaren Felder werden auf dem **eigenen** Brett
+markiert — der Umschalter stand aber auf „Gegner", die Anzeige lief also ohnehin ins Leere.
+
+**Geändert** (alles im `max-width:779px`-Block, am PC keine Zeile)
+- Manövermodus holt das **eigene Brett** nach vorn, Abbrechen führt zurück.
+- Hochkant ausgeblendet, was der Modus nicht braucht: Aktionsknöpfe, Schiffsliste (das Schiff
+  wird auf dem Brett angetippt), Scan-Hinweis, Verlassen-Knopf.
+- Richtungen als **reine Pfeile** in einer Reihe statt fünf beschrifteter Knöpfe in zwei;
+  Hinweistext in einer Kurzfassung.
+- `max-height:58dvh` auf der Leiste als Fangnetz: das Brett kann nie mehr ganz verschwinden.
+
+**Zwei Werkzeugbefunde**
+- `tools/shot.mjs` hörte mitten in der Sitzung auf, Bilder zu schreiben — Chrome beendet sich
+  auch im Fehlerfall mit 0. Der Vorher/Nachher-Vergleich lief gegen Dateien, die es nie gab,
+  und meldete „Unterschied". Beinahe hätte ich die Desktop-Ansicht für kaputt gehalten. Das
+  Werkzeug prüft jetzt selbst, ob etwas entstanden ist, und scheitert sonst laut.
+- Weil kein Bild mehr zu bekommen war, ist „am PC ändert sich nichts" **strukturell**
+  abgesichert: ein Test belegt, dass jede neue Regel im Hochkant-Block steht und in keinem
+  Breitbild-Block.
+
+**Nebenbei gefunden:** Ein Ersatz am Abbrechen-Knopf hatte nie gegriffen (die Zielzeile war
+zwischenzeitlich eine andere), und nach einem Manöver blieben Weite und Tauchfahrt gesetzt.
+Beides hat der neue Verhaltenstest sofort gezeigt.
+
 ## 2026-09-04 (Fortsetzung) · Manöver und Tauchen aufgewertet
 
 Aus dem Gespräch über Player Agency. Vorher gemessen: **Tauchen und Manöver *sind* der

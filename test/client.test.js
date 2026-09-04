@@ -442,3 +442,26 @@ test('Das Orakel spricht im Funkverkehr', () => {
   assert.ok(!/<i>Du<\/i> → \$\{coord\(r\.cell\)\}/.test(app), 'nicht mehr von „Du“');
   assert.match(app, /gelogen wurde nicht/, 'beim Ausweichen wird es ausgesprochen');
 });
+
+test('Der Manöver-Umbau gilt nur hochkant', () => {
+  // Hochkant schob das geöffnete Manöverfeld das Brett komplett aus dem Bild –
+  // ausgerechnet das Brett, auf dem die erreichbaren Felder markiert werden.
+  // Die Abhilfe darf am PC nichts ändern, wo alles nebeneinander Platz hat.
+  const portrait = mediaBody(cssCode, '@media(max-width:779px)');
+
+  assert.match(portrait, /\.mv-wort\{display:none\}/, 'hochkant nur Pfeile, keine Wörter');
+  assert.ok(!desktopCss.includes('.mv-wort{display:none}'), 'am PC bleiben die Wörter stehen');
+
+  // Fangnetz: die Leiste darf das Brett nie ganz verdrängen.
+  assert.match(portrait, /\.controls\{[^}]*max-height/, 'hochkant hat die Leiste eine Obergrenze');
+  assert.ok(!/\.controls\{[^}]*max-height/.test(desktopCss), 'am PC nicht');
+
+  // Ausgeblendet wird hochkant, was im Manövermodus niemand braucht.
+  const versteckt = /:has\(#maneuver-panel:not\(\.hidden\)\)([\s\S]*?)\{display:none\}/g;
+  const hochkantRegeln = [...portrait.matchAll(versteckt)].map((m) => m[0]).join(' ');
+  for (const teil of ['.row.actions', '#maneuver-ships']) {
+    assert.ok(hochkantRegeln.includes(teil), `hochkant ausgeblendet: ${teil}`);
+    assert.ok(!desktopCss.includes(`:has(#maneuver-panel:not(.hidden)) ${teil}`),
+      `am PC bleibt ${teil} stehen`);
+  }
+});

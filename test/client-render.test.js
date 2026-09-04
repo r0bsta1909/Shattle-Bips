@@ -624,3 +624,19 @@ test('Ohne Bilanz bleibt der Block leer statt zu werfen', async () => {
   })));
   assert.equal(byId.get('end-summary').innerHTML, '', 'leer, nicht kaputt');
 });
+
+test('Manövermodus holt das eigene Brett nach vorn', async () => {
+  // Markiert wird auf dem EIGENEN Brett. Hochkant ist immer nur ein Bereich
+  // sichtbar - ohne diesen Sprung laege die ganze Anzeige hinter dem Reiter
+  // "Gegner" und die erreichbaren Felder waeren unsichtbar.
+  const { byId, feed } = await bootClient();
+  feed(stateMsg());
+  assert.equal(byId.get('pane-foe')._classes.has('active'), true, 'startet beim Gegner');
+
+  byId.get('btn-maneuver').onclick();
+  assert.equal(byId.get('pane-own')._classes.has('active'), true, 'Manöver zeigt die eigene Flotte');
+  assert.equal(byId.get('pane-foe')._classes.has('active'), false);
+
+  byId.get('btn-maneuver-cancel').onclick();
+  assert.equal(byId.get('pane-foe')._classes.has('active'), true, 'Abbrechen führt zurück');
+});

@@ -133,4 +133,16 @@ execFileSync(chrome, [
   `file:///${rahmen.replace(/\\/g, '/')}`
 ], { stdio: 'ignore' });
 
+// Nachsehen, ob wirklich etwas entstanden ist. Chrome beendet sich auch dann
+// mit 0, wenn es gar kein Bild geschrieben hat - in einer Sitzung liefen so
+// mehrere Vergleiche gegen Dateien, die es nie gab, und meldeten brav
+// "Unterschied". Ein Messwerkzeug, das stumm nichts tut, ist schlimmer als
+// keines: es erzeugt Befunde statt sie zu verhindern.
+if (!existsSync(path.resolve(ziel))) {
+  console.error(`Chrome hat kein Bild geschrieben: ${ziel}`);
+  console.error('Chrome beendet sich auch bei Fehlschlag mit 0. Pruefen:');
+  console.error('  "%s" --version   (antwortet das nicht, laeuft Chrome hier gar nicht)', chrome);
+  process.exit(1);
+}
+
 console.log(`${ziel}  (${breite}x${hoehe}, ${modus})`);

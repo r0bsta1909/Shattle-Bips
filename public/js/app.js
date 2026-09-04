@@ -974,18 +974,27 @@ $('btn-dive').onclick = () => send({ t: 'dive' });
 $('btn-maneuver').onclick = () => {
   mode = mode === 'maneuver' ? 'normal' : 'maneuver';
   $('maneuver-panel').classList.toggle('hidden', mode !== 'maneuver');
+  // Markiert wird auf dem EIGENEN Brett. Hochkant ist immer nur ein Bereich
+  // sichtbar - ohne diesen Sprung waeren die hellen Felder hinter dem Reiter
+  // "Gegner" versteckt, und die Anzeige liefe ins Leere.
+  showPane(mode === 'maneuver' ? 'pane-own' : 'pane-foe');
   if (mode === 'maneuver' && manShip === null) {
     const first = state.own.ships.find((s) => !s.hits.length && !s.sunk);
     if (first) manShip = first.index;
   }
   renderGame();
 };
-$('btn-maneuver-cancel').onclick = () => { mode = 'normal'; manShip = null; $('maneuver-panel').classList.add('hidden'); renderGame(); };
+$('btn-maneuver-cancel').onclick = () => {
+  mode = 'normal'; manShip = null; manSteps = 1; manDive = false;
+  $('maneuver-panel').classList.add('hidden');
+  showPane('pane-foe');
+  renderGame();
+};
 for (const b of document.querySelectorAll('#maneuver-panel button[data-move]')) {
   b.onclick = () => {
     if (manShip === null) { $('game-error').textContent = 'Erst ein Schiff wählen.'; return; }
     send({ t: 'maneuver', shipIndex: manShip, move: b.dataset.move, steps: manSteps, dive: manDive });
-    mode = 'normal'; manShip = null;
+    mode = 'normal'; manShip = null; manSteps = 1; manDive = false;
     $('maneuver-panel').classList.add('hidden');
     selected.clear();
   };

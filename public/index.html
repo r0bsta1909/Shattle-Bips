@@ -188,8 +188,9 @@
     </div>
     <p class="hint" id="scan-hint"></p>
     <div id="maneuver-panel" class="man-panel hidden">
-      <p class="hint">Schiff wählen – die erreichbaren Felder werden auf deinem Brett hell.
-        Dann Weite und Richtung.</p>
+      <p class="hint"><span class="mv-kurz">Schiff auf dem Brett antippen, dann Richtung.</span><span
+        class="mv-wort">Schiff auf deinem Brett antippen – die erreichbaren Felder werden hell.
+        Dann Weite und Richtung.</span></p>
       <div id="maneuver-ships" class="row"></div>
       <!-- Nur beim U-Boot und nur wenn die Tauchfahrt erlaubt und moeglich ist. -->
       <label class="chk hidden" id="man-dive-wrap">
@@ -197,15 +198,15 @@
       </label>
       <div class="row" id="man-steps"></div>
       <div class="row">
-        <button data-move="up">↑ hoch</button>
-        <button data-move="down">↓ runter</button>
-        <button data-move="left">← links</button>
-        <button data-move="right">→ rechts</button>
-        <button data-move="rotate">⟳ drehen</button>
+        <button data-move="up">↑<span class="mv-wort"> hoch</span></button>
+        <button data-move="down">↓<span class="mv-wort"> runter</span></button>
+        <button data-move="left">←<span class="mv-wort"> links</span></button>
+        <button data-move="right">→<span class="mv-wort"> rechts</span></button>
+        <button data-move="rotate">⟳<span class="mv-wort"> drehen</span></button>
       </div>
       <!-- Scheinmanöver: ein Manöver ist ein Befehl, keine Ortsveränderung.
            Der Gegner hört dieselbe Meldung wie bei einer echten Bewegung. -->
-      <button id="btn-man-hold" class="wide-btn">Position halten – Scheinmanöver</button>
+      <button id="btn-man-hold" class="wide-btn">Position halten<span class="mv-wort"> – Scheinmanöver</span></button>
       <button id="btn-maneuver-cancel" class="wide-btn">Abbrechen</button>
     </div>
     <p id="game-error" class="error"></p>

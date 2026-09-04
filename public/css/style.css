@@ -433,6 +433,9 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
   background:transparent;border-color:var(--line);color:var(--muted)}
 .leave-btn:hover{color:var(--ink);border-color:var(--hit)}
 
+/* Kurzfassung des Manöver-Hinweises: nur hochkant sichtbar. */
+.mv-kurz{display:none}
+
 /* Angehaltene Partie: die Uhr steht, das muss man sehen. */
 #clock.paused{color:var(--accent);border-color:var(--accent)}
 
@@ -465,3 +468,32 @@ main{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
    das Schiff selbst wird darüber markiert und soll sichtbar bleiben. */
 .cell.manarea{background:#25506a}
 #man-steps button.sel{border-color:var(--accent);background:#1b3a4e}
+
+/* ------------------------------------------ Manövermodus hochkant
+   Die Bedienleiste ist im festen Raster `auto` hoch. Mit geöffnetem
+   Manöverfeld wuchs sie über den ganzen Schirm und schob das Brett heraus –
+   ausgerechnet das Brett, auf dem die erreichbaren Felder markiert werden.
+
+   Deshalb hochkant: alles weg, was im Manövermodus nicht gebraucht wird, und
+   eine Obergrenze als Fangnetz. Am PC bleibt die Leiste unverändert. */
+@media(max-width:779px){
+  /* Nur der Pfeil, kein Wort: so passen alle fünf Richtungen in eine Reihe.
+     Derselbe Schalter kürzt den Hinweistext von zwei Zeilen auf eine – die
+     zwei gesparten Zeilen sind hochkant genau die zehnte Rasterreihe. */
+  .mv-wort{display:none}
+  .man-panel{margin-top:6px;padding-top:6px}
+  .man-panel .row{margin:6px 0}
+  .mv-kurz{display:inline}
+  .man-panel button[data-move]{flex:1 1 0;min-width:auto;padding:11px 4px}
+
+  /* Im Manövermodus sind Feuern/Aufklären/Tauchen gesperrt und die
+     Schiffsliste überflüssig – das Schiff wird auf dem Brett angetippt. */
+  .controls:has(#maneuver-panel:not(.hidden)) .row.actions,
+  .controls:has(#maneuver-panel:not(.hidden)) #scan-hint,
+  .controls:has(#maneuver-panel:not(.hidden)) #maneuver-ships,
+  .controls:has(#maneuver-panel:not(.hidden)) .leave-btn{display:none}
+
+  /* Fangnetz: die Leiste darf das Brett nie ganz verdrängen. Browser ohne
+     :has() verwerfen die Regeln darüber, diese hier greift trotzdem. */
+  .controls{max-height:58dvh;overflow:auto}
+}

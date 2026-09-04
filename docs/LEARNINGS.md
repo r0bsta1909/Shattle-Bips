@@ -188,6 +188,33 @@ Dasselbe serverseitig: `game.log` ist die eine Wahrheit, jede Kennzahl ist eine 
 davon. Deshalb rechnet `summarize()` die Täuschungsbilanz aus dem Protokoll, statt während der
 Partie mitzuzählen — eine neue Kennzahl fasst die Spielschleife nicht mehr an.
 
+### In einem festen Raster frisst eine wachsende Leiste den Inhalt
+Die Spielansicht ist hochkant genau schirmhoch: `grid-template-rows: auto 1fr auto`. Als das
+Manöverfeld aufklappte, wuchs die `auto`-Zeile der Bedienleiste über den ganzen Schirm und
+drückte das `1fr` auf null — vom Brett blieb **eine Zeile** übrig.
+
+**Regel:** Jeder aufklappbare Bereich in einer `auto`-Zeile eines schirmhohen Rasters braucht
+eine Obergrenze (`max-height` + `overflow:auto`) als Fangnetz. Und aufklappen heißt aufräumen:
+was der Modus nicht braucht, verschwindet für seine Dauer — im Manövermodus sind Feuern,
+Aufklären und Tauchen ohnehin gesperrt.
+
+### Ein Modus, der etwas markiert, muss das Markierte auch zeigen
+Die erreichbaren Felder werden auf dem **eigenen** Brett hell. Hochkant ist immer nur ein
+Bereich sichtbar — und der Umschalter stand auf „Gegner". Die ganze Anzeige lief ins Leere,
+ohne dass irgendetwas kaputt war. **Regel:** Wer eine Markierung einführt, prüft im selben Zug,
+ob sie auf dem gerade sichtbaren Bereich liegt.
+
+### Ein Messwerkzeug, das stumm nichts tut, erzeugt Befunde statt sie zu verhindern
+`tools/shot.mjs` hörte mitten in einer Sitzung auf, Bilder zu schreiben — Chrome beendet sich
+auch im Fehlerfall mit 0. Der Vergleich „vorher gegen nachher" lief daraufhin gegen zwei
+Dateien, die es nie gab, und meldete brav „Unterschied". Ich hätte daraus beinahe geschlossen,
+die Desktop-Ansicht sei kaputt.
+
+**Regel:** Nach jedem Werkzeuglauf prüfen, ob das Ergebnis überhaupt existiert, und sonst laut
+scheitern. Das Werkzeug tut das jetzt selbst. Und wenn kein Bild zu bekommen ist, lässt sich
+„am PC ändert sich nichts" auch **strukturell** absichern: ein Test, der belegt, dass jede neue
+Regel im `max-width:779px`-Block steht und in keinem Breitbild-Block.
+
 ### Ein Bildschirmfoto kann enger sein als die Wirklichkeit
 `tools/shot.mjs` zeigte hochkant ein Bild, in dem Kopfzeile, Reiter und Brett rechts
 abgeschnitten waren. Ich hätte beinahe CSS repariert, das nie kaputt war.
